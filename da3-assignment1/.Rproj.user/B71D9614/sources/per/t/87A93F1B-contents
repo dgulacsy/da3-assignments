@@ -1,0 +1,339 @@
+#########################################################################################
+# DA3 Assignment 1 
+# Data Cleaning Script
+# 
+# GOAL:
+# Task is to help a company operating small and mid-size apartments hosting 2-6 guests. 
+# The company is set to price their new apartments not on the market. 
+# Build a price prediction model.
+#
+# Data Source
+# Website: http://insideairbnb.com/get-the-data.html
+# File: 
+#########################################################################################
+
+# Initialize environment --------------------------------------------------
+# CLEAR MEMORY
+rm(list=ls())
+
+# General
+library(tidyverse)
+library(janitor)
+# Text Analysis
+library(tidytext)
+library(stopwords) 
+library(stringr)
+# Visualization
+library(ggplot2)
+library(stargazer)
+library(xtable)
+library(knitr)
+# Geo
+library(geosphere)
+
+options(digits=3)
+
+# Set data directory
+data_dir <- "/Users/Dominik/OneDrive - Central European University/2nd_trimester/DA3/da3-assignments/da3-assignment1/data/"
+out <- "/Users/Dominik/OneDrive - Central European University/2nd_trimester/DA3/da3-assignments/da3-assignment1/out/"
+
+# Plot sizes
+mywidth=7.5
+myheight=5.62
+
+# Import data -------------------------------------------------------------
+df<-read_csv(paste0(data_dir,"raw/airbnb-melbourne-listings.csv"))
+
+# 1st Feature Selection -------------------------------------------
+
+# # Selected variables
+# vars<-read_csv(paste0(data_dir,"raw/variables.csv"))
+# print(xtable(vars),type = "html", file = paste0(out, "t_variables.html"),
+#       include.rownames=FALSE, booktabs=TRUE, floating = FALSE)
+
+# Import file containing feature selection strategy
+fss <- read_csv(paste0(data_dir,"raw/feature_selection_strat.csv"))
+
+# Extract selection scheme
+fss <- fss[fss$use==1,"variable"]
+
+# Keep only features needed
+df<-df[ , (names(df) %in% fss$variable)]
+
+# Check data availability for features
+# Write data availability function
+data_availability <- function(data) {
+  ar<-apply(data,2,function(x){
+    ar<-sum(is.na(x))/length(x)
+    ar
+  })
+  ar_df<-data.frame(matrix(ncol = length(names(data))))
+  colnames(ar_df)<-names(data)
+  ar_df[1,] = as.vector(1-ar)
+  ar_df[2,] = as.vector(ar)
+  # Add an id variable for the filled regions and reshape
+  ar_df <- ar_df %>% 
+    mutate(ind = factor(c("Available","NA"))) %>%  
+    gather(variable, value, -ind)
+  out_df<-data.frame(vars=names(data),availability=as.vector(1-ar))
+  p<-ggplot(ar_df, aes(x = value, y = variable, fill = ind)) + 
+    geom_bar(position = "fill",stat = "identity") +
+    scale_x_continuous(labels = scales::percent_format())
+  #ggsave(paste0(out, "p_data_availability.png"),plot = p, dpi = 1200)
+  print(p)
+  return(out_df)
+}
+
+av_df<-data_availability(df)
+
+# Drop features with low availability
+df<-df[ , (names(df) %in% av_df[av_df$availability>0.6,"vars"])]
+
+# Check for duplicates -------------------------------------------------------
+# Double-check ID validity with url link
+df$listing_url<-lapply(df$listing_url, function(x) str_extract(x,"(?:[^\\/](?!(/)))+$"))
+names(df)[names(df)=="listing_url"]<-"id_verify"
+
+nrow(df[df$id!=df$id_verify,]) # IDs are consequent
+
+df <- select(df,-id_verify)
+
+# Check duplicates
+nrow(df[duplicated(df$id),]) # No duplicates
+df<-df[!duplicated(df$id),]
+
+# Check type of features
+str(df)
+
+# Feature Engineering & Conversion -----------------------------------------------------
+# ID number to character
+df$id <- as.character(df$id)
+
+# Remove dollar signs from price
+df$price<-gsub("\\$","",df$price) %>% 
+  as.numeric()
+
+# neigbourhood to factor
+df$neighbourhood_cleansed <- factor(df$neighbourhood_cleansed)
+
+# Distance from city center in meters
+city_center=c(144.96246261056416, -37.806175520856705)
+df$n_dist_center<-mapply(function(lat,long){
+  distm(c(long,lat), city_center, fun = distHaversine)},
+  lat=df$latitude,long=df$longitude)
+
+# keep if property type is Apartment, House or Townhouse
+prop_df<-table(df$property_type)
+
+prop_grouping=list(house=c("house","townhouse","cottage","villa"),
+                   hotel=c("hotel"),
+                   apartment = c("apartment","condo","hostel"))
+
+mapply(function(keys,groups){
+  lapply(keys,function(key){
+    df$property_type <<- ifelse(grepl(key,tolower(df$property_type)), groups, df$property_type)
+  })
+},keys=prop_grouping,groups=names(prop_grouping))
+
+df$property_type <- factor(ifelse(df$property_type %in% names(prop_grouping), df$property_type, "other"))
+
+# Rename room type because it is too long
+table(df$room_type)
+df$room_type <- factor(ifelse(df$room_type== "Entire home/apt", "Entire Apt",
+                                   ifelse(df$room_type== "Private room", "Private",
+                                          ifelse(df$room_type== "Shared room", "Shared",
+                                                 ifelse(df$room_type== "Hotel room", "Hotel",NA)))))
+
+# Encode bathrooms
+table(df$bathrooms_text)
+df$bathrooms_text<-as.numeric(str_extract(df$bathrooms_text,"[+-]?([0-9]*[.])?[0-9]+"))
+barplot(table(df$bathrooms_text), main="Bathrooms", horiz=TRUE)
+
+df<-mutate(df,bathrooms_text = ifelse(bathrooms_text>3, "3+", bathrooms_text))
+df$bathrooms_text <- as.factor(df$bathrooms_text)
+
+# Create number of days listed
+df <- df %>%
+  mutate(
+    n_listed_days = as.numeric(as.Date(last_scraped,format="%Y-%m-%d") -
+                                as.Date(first_review,format="%Y-%m-%d")))
+
+# Group minimum and maximum nights
+table(df$minimum_nights)
+barplot(table(df$minimum_nights), main="Minimum Nights Dist.", horiz=TRUE)
+
+df$minimum_nights<-cut(df$minimum_nights, right = FALSE, breaks = c(1, 2, 3, 4, 8, 15, 31, max(df$minimum_nights)+1), labels = c("1","2","3","4-7","8-14","15-30","30+"))
+table(df$minimum_nights)
+
+table(df$maximum_nights)
+barplot(table(df$maximum_nights), main="Maximum Nights Dist.", horiz=TRUE)
+
+df$maximum_nights<-cut(df$maximum_nights, right = FALSE, breaks = c(1, 8, 15, 22, 32, 61, 91, 181, 366, max(df$maximum_nights)+1), labels = c("1-7","8-14","15-21","22-31","32-60","61-90","91-180","181-365","365+"))
+table(df$maximum_nights)
+
+# op <- par(mfcol = 1:2)
+# with(df,
+#      {
+#        barplot(table(df$minimum_nights), main="Minimum Nights Dist.", horiz=TRUE)
+#        barplot(table(df$maximum_nights), main="Maximum Nights Dist.", horiz=TRUE)
+#      }
+# )
+# par(op)
+
+# Turn amenities into list
+df$amenities<-gsub("\\[","",df$amenities)
+df$amenities<-gsub("\\]","",df$amenities)
+df$amenities<-gsub('\\"',"",df$amenities)
+df$amenities<-as.list(strsplit(df$amenities, ","))
+
+df$amenities<-lapply(df$amenities, function(x) unlist(lapply(x,function(y){
+  y <- gsub("\\u2013","",y)
+  y <- gsub("\\u2019","",y)
+  return(tolower(y))
+  })))
+
+# Turn lists into dummy variables
+levs <- levels(factor(unlist(df$amenities)))
+binary_df<-as.data.frame(do.call(rbind, lapply(lapply(df$amenities, factor, levs), table)))
+
+# Group aggregate amenity dummy variables based on keywords
+
+# Clean text
+text <- paste(colnames(binary_df), collapse = " ") 
+text <- gsub("\\u2013","",text)
+text <- gsub("\\u2019","",text)
+text <- gsub("\\\\","",text)
+text <- gsub("\\d","",text)
+
+# Create text dataframe
+text_df <- data.frame(Text = text) 
+
+text_words <- text_df %>% 
+  unnest_tokens(output = word, input = Text) 
+
+# Calculate word counts
+text_words <- text_words  %>% count(word, sort = TRUE)
+
+# Filter out stopwords
+text_words <- text_words[!(text_words$word %in% stopwords("en")),]
+
+# Select top 10 frequent word
+top_words <- top_n(text_words, 30, n)
+
+ggplot(top_words, aes(x = n, y = reorder(word, n), fill = n)) + 
+  geom_bar(position = "dodge",stat = "identity")+
+  labs(y="word",x="frequency")
+ggsave(paste0(out, "p_top_words_amenities.png"), dpi = 1200)
+# Create Amenity Groups based on keywords
+amenity_group_keywords <- list(tv_and_programmes=c("tv","hdtv","cable","television"),
+                               only_tv_streaming = c("netflix","amazon prime"),
+                               oven=c("oven"),
+                               stove=c("stove"),
+                               microwave=c("microwave"),
+                               fridge_freezer=c("fridge","refrigerator","freezer"),
+                               bbq=c("bbq","barbecue","barbeque"),
+                               kitchen_supplies=c("utensil","cooking basics","dish","silverware"),
+                               coffee_tea=c("coffee","espresso","tea","kettle","nespresso"),
+                               dishwasher=c("dishwasher"),
+                               washer=c("washer"),
+                               dryer=c("dryer"),
+                               fireplace=c("fireplace"),
+                               music=c("speaker","sound"),
+                               bathroom_cosmetics=c("soap","shampoo","conditioner","shower gel"),
+                               bathroom_supplies=c("towel", "bathroom essentials"),
+                               bathtub=c("bathtub"),
+                               pets=c("pet"),
+                               connectivity=c("wifi","ethernet","mbps"),
+                               elevator=c("elevator"),
+                               paid_parking=c("paid parking","paid residential garage","paid street"),
+                               free_parking=c("parking","garage","carport"),
+                               air_conditioning=c("air condition","fan"),
+                               baby=c("baby","crib"),
+                               balcony=c("balcony"),
+                               iron=c("iron"),
+                               kitchen=c("kitchen"),
+                               breakfast=c("breakfast"),
+                               safety_features=c("carbon","fire","first aid kit","gated","lockbox","security"),
+                               outdoor=c("garden","backyard","lake","terrace","beachfront","waterfront"),
+                               pool=c("pool"),
+                               gym=c("gym"),
+                               welcome=c("host greet"),
+                               luggage_dropoff=c("luggage"),
+                               self_checkin=c("self check-in")
+                               )
+
+helper_df<-binary_df
+amenity_grouping<-mapply(function(keys,groups){
+  cols<-colnames(select(helper_df,contains(keys)))
+  helper_df<<-helper_df[,!(colnames(helper_df) %in% cols)]
+  return(cols)
+}, keys=amenity_group_keywords, groups=names(amenity_group_keywords))
+
+amenity_dummies<-as.data.frame(mapply(function(keys,groups){
+  helper <- select(binary_df,contains(keys))
+  helper[,groups] <- apply(helper, 1, function(x) {
+    if(sum(x)>0){
+      return(1)
+    }
+    else{
+      return(0)
+    }
+  }
+  )
+}, keys=amenity_group_keywords, groups=names(amenity_group_keywords)))
+
+# Check binary variables' frequency
+binary_frequency <- function(df) {
+  bf<-apply(df,2,mean)
+  bf_df<-data.frame(matrix(ncol = length(names(df))))
+  colnames(bf_df)<-names(df)
+  bf_df[1,] = as.vector(1-bf)
+  bf_df[2,] = as.vector(bf)
+  # Add an id variable for the filled regions and reshape
+  bf_df <- bf_df %>% 
+    mutate(ind = factor(c("0","1"))) %>%  
+    gather(variable, value, -ind)
+  out<-data.frame(vars=names(df),freq=as.vector(bf))
+  p<-ggplot(bf_df, aes(x = value, y = variable, fill = ind)) + 
+    geom_bar(position = "fill",stat = "identity") +
+    scale_x_continuous(labels = scales::percent_format())
+  print(p)
+  return(out)
+}
+
+bf_df<-binary_frequency(amenity_dummies)
+
+# Drop binary variables that occur rarely
+amenity_dummies<-amenity_dummies[ , (names(amenity_dummies) %in% bf_df[bf_df$freq>0.05,"vars"])]
+
+# Rename dummies
+colnames(amenity_dummies)<-paste0("d_",names(amenity_dummies))
+
+# Convert dummy variables to factors
+for (i in 1:ncol(amenity_dummies)){
+  amenity_dummies[,i]<-as.factor(amenity_dummies[,i])
+}
+
+# Combine Grouped amenity dummies to original dataset
+df <- cbind(df,amenity_dummies)
+
+# Rename variables
+df<-rename(df,
+           n_price=price,
+           f_neighbourhood=neighbourhood_cleansed,
+           f_room_type=room_type,
+           f_property_type=property_type,
+           f_minimum_nights = minimum_nights, 
+           f_maximum_nights = maximum_nights,
+           f_bathrooms=bathrooms_text,
+           n_accommodates=accommodates,
+           n_bedrooms=bedrooms,
+           n_beds=beds)
+
+# Keep columns if contain d_, n_, f_, and id
+df <- df %>%
+  select(matches("^d_.*|^n_.*|^f_.*"), id)
+
+# Write out data to workfile
+write_rds(df, paste0(data_dir, "/clean/airbnb-melbourne-workfile.rds"))
+write_csv(df, paste0(data_dir, "/clean/airbnb-melbourne-workfile.csv"))

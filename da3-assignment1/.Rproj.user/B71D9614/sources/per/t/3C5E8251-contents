@@ -1,0 +1,879 @@
+---
+title: "Re-evaluation of the Philips curve"
+author: "Dominik Gulácsy"
+date: "02/01/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+abstract: 'This analysis is addressing the question whether the inverse relationship between unemployment and inflation stated by the Philips curve exists in modern economies. I use cross-sectional data on countries from 2017. After running several regression models, my results support that this inverse relationship does not hold for the present (2016-2018). This finding has relevance to appropiately evaluate policy decisions regarding unemployment and economic growth, and assess the overall health of the economy.'
+subtitle: Does higher inflation convey lower unemployment?
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
+```
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+# Initialize environment ----------------------------------------------------------------
+# Visualization
+library(ggthemes)
+library(ggplot2)
+require(scales)
+require(gridExtra)
+library(Hmisc)
+library(texreg)
+# Modeling
+library(estimatr)
+library(lspline)
+# General
+library(dplyr)
+library(tidyverse)
+library(knitr)
+# Propitiatory script
+source("sum_stat.R", local = knitr::knit_global())
+
+rm(list = ls())
+path <- "/Users/Dominik/OneDrive - Central European University/1st_trimester/DA2/DA2_Assignments/Assignment2/"
+
+# Data Prep -------------------------------------------------------------
+
+# Import data
+df_all <- read_csv("https://raw.githubusercontent.com/dgulacsy/DA2_Assignments/main/Assignment2/data/clean/unemp_infl_clean.csv")
+df_all$year <- as.factor(df_all$year)
+
+# Change unit of measurement for population
+df_all$population <- df_all$population/10^5
+
+# Filter for year 2017
+df <- filter(df_all, df_all$year==2017)
+
+# Drop observations with an inflation rate below or equal to zero to take reciprocal properly
+df <- filter(df, df$inflation > 0)
+```
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+# Create sum_stat function
+sum_stat <- function( df , var_names , stats , num_obs = TRUE ){
+  k <- length( var_names )
+  built_in_stat <- c('mean','median','mode','min','max','1st_qu.','3rd_qu',
+                     'sd','var','range','iqr')
+  do_stat <- intersect( stats , built_in_stat )
+  if ( is_empty(do_stat) ){
+    stop('Error, no such statistics is implemented! Choose from: mean,median,min,max,1st_qu.,3rd_qu')
+  }
+  # By default add the number of missing observations and the number of used observations
+  m <- length( do_stat )
+  if ( num_obs ){
+    do_stat <- c( do_stat , "# missing", "# used obs")
+  }
+  # Create tibble for output
+  sum_stat <- as_tibble( matrix( 0 , nrow = m , ncol = k ) , name_repair = "unique" )
+  for ( j in 1 : k ) {
+    # Get the data for the j'th variable
+    var_j <- df[ var_names[ j ] ]
+    if ( num_obs ){
+      # Count the missing values and add to statistics
+      sum_stat[ m + 1 , j ] <- as.integer( sum( is.na( var_j ) ) )
+      # Count observations used
+      sum_stat[ m + 2 , j ] <- as.integer( sum( !is.na( var_j ) ) )
+    }
+    # Remove missing values
+    var_j <- var_j[ !is.na( var_j ) ]
+    # Name the sum_stat's column
+    colnames( sum_stat )[ j ] <- var_names[ j ]
+    for ( i in 1 : m ) {
+      # Central tendency
+      if (do_stat[ i ] == "mean"){
+        sum_stat[[i,j]] <- mean( var_j )
+      } else if (do_stat[ i ] == "median"){
+        sum_stat[i,j] <- median( var_j )
+      } else if (do_stat[ i ] == "mode"){
+        sum_stat[i,j] <- mode( var_j )
+      } 
+      # Support
+      else if (do_stat[ i ] == "min"){
+        sum_stat[i,j] <- min( var_j )
+      } else if (do_stat[ i ] == "max"){
+        sum_stat[i,j] <- max( var_j )
+      } 
+      # Quartiles
+      else if (do_stat[ i ] == "1st_qu."){
+        sum_stat[i,j] <- quantile( var_j , probs = 0.25 )
+      } else if (do_stat[ i ] == "3rd_qu"){
+        sum_stat[i,j] <- quantile( var_j , probs = 0.75)
+      } 
+      # Dispersion
+      else if (do_stat[ i ] == "sd"){
+        sum_stat[i,j] <- sd( var_j )
+      } else if (do_stat[ i ] == "var"){
+        sum_stat[i,j] <- var( var_j )
+      } else if (do_stat[ i ] == "range"){
+        sum_stat[i,j] <- max( var_j ) - min( var_j )
+      } else if (do_stat[ i ] == "iqr"){
+        sum_stat[i,j] <- quantile( var_j , probs = 0.75) - quantile( var_j , probs = 0.25)
+      } 
+    }
+  }
+  # Finally add a column which contains the requested statistics and relocate to first position
+  sum_stat <- sum_stat %>% 
+    mutate( statistics = do_stat ) %>% 
+    relocate( statistics )
+  
+  return( sum_stat )
+}
+
+```
+```{r}
+# Linear Correlation Coefficient Heatmap ----------------------------------
+
+corrmatrix <- function(df, year) {
+  cors <- function(df) {
+    M <- rcorr(as.matrix(df)) 
+    Mdf <- map(M, ~data.frame(.x)) 
+    return(Mdf) }
+  
+  formatted_cors <- function(df){
+    cors(df) %>%
+      map(~rownames_to_column(.x, var="measure1")) %>%
+      map(~pivot_longer(.x, -measure1, "measure2")) %>% 
+      bind_rows(.id = "id") %>%
+      pivot_wider(names_from = id, values_from = value) %>%
+      mutate(sig_p = ifelse(P < .05, T, F), p_if_sig = ifelse(P <.05, P, NA), r_if_sig = ifelse(P <.05, r, NA)) }
+  
+  numeric_df <- keep( df , is.numeric)
+  
+  result <- formatted_cors(numeric_df) %>% 
+    ggplot(aes(measure1, measure2, fill=r, label=round(r_if_sig,2))) +
+    geom_tile() + 
+    labs(x = NULL, y = NULL, fill = "Pearson's\nCorrelation", title=paste0("Linear Correlation Coefficients ",year), subtitle="Only significant coefficients shown") + 
+    scale_fill_gradient2(mid="#FBFEF9",low="#0C6291",high="#A63446", limits=c(-1,1)) +
+    geom_text() +
+    theme_bw() +
+    scale_x_discrete(expand=c(0,0)) + 
+    scale_y_discrete(expand=c(0,0))
+
+  rm(numeric_df)
+  return(result)
+}
+```
+
+# Introduction
+The main goal of this analysis is to test the Philips curve's validity in current times. This economic theory was developed by [A. W. Phillips](https://onlinelibrary.wiley.com/doi/full/10.1111/j.1468-0335.1958.tb00003.x) stating that inflation and unemployment have a stable and inverse relationship. It was based on the idea that with economic growth comes inflation, which in turn should lead to more jobs and less unemployment. It sounds logical, however it was seriously called into question during the times of stagflation in the 1970's.   
+
+The major difference in case of this analysis is that by conducting a cross-sectional causal analysis I can get insight on whether the theory stands in global terms instead of checking it for one country throughout time. To eventually check the theory I run regressions by taking the reciprocal of inflation as this should make the pattern of association linear when there is indeed a an inverse relationship between unemployment and inflation.
+
+# Data
+The data used in the analysis is solely from the World Bank. I used the WDI package to download the data in R. The data contains economic indicators on 122 countries for 2017 after removing observations with any missing values. I may add that it is highly probable that by this smaller countries or countries that are in turmoil (e.g.: Venezuela) will be underrepresented as they are more likely to have missing values. Given that there are only few observations available I ignore this issue.  
+
+Otherwise, the quality of the raw data is superior, it is well-documented and provides good coverage. However, one may argue that indicators are not truly comparable and may be politically biased as they are from different national statistical agencies. Since there are no readily available data to counter for these measurement errors I keep in mind this as a limitation to results. Furthermore, to appropriately check the inverse relationship I need to drop observations with inflation below 0 since it messes up the linear regression. This likely makes the sample even less representative as well. Finally, I end up with 118 observations.
+
+As I need to regress unemployment on inflation I want to compare countries that can be considered similar in every other way but inflation. Therefore I use some control variables in my analysis which are the following: GDP Growth (%), Savings (% of GDP), Broad Money (% of GDP) and Government Expenditure (% of GDP).
+
+```{r, fig1, fig.height = 4, fig.width = 9, fig.cap = "Distribution of variables (2017)"}
+# EDA ---------------------------------------------------------------------
+
+# Histograms
+
+fig1 <- df %>% rename(
+  'Gov. Expenditure (% of GDP)' = govexp,
+  'GDP Growth (%)' = gdpgrowth,
+  'Broad Money (% of GDP)' = money,
+  'Savings (% of GDP)' = savings,
+  'Inflation (%)' = inflation,
+  'Unemployment (%)' = unemployment) %>% 
+  subset (select = -population) %>% 
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~key, scales = "free") +
+  geom_histogram()+
+  theme_bw() + 
+  scale_fill_wsj()
+
+fig1
+```
+
+As it can be seen on the histograms all variables are in relative terms. This approach means that size is not relevant. Also, this makes interpretation easier and variables more normal thus improving the fit of the linear regression. Some variables are fairly normal while some are closer to lognormal distribution (Broad Money, Inflation, Unemployment). In case of money supply and unemployment it is likely due to the fact that these measures cannot be negative while in case of inflation it is the result of a technical requirement.  
+
+Taking the logarithm of these variables may alleviate non-normality but interpretation would be hard so I decide not to take logs. Looking at the distributions I can see some extreme values in gov. expenditure and inflation. I investigate their effect as a robustness check later on.
+
+```{r}
+# Summary statistics
+desc_stat <- sum_stat(df,
+         c('govexp','gdpgrowth','money','savings','inflation','unemployment'), 
+         c('mean','median','min','max','1st_qu.','3rd_qu','sd','range'),num_obs = F)
+
+# Rename columns and round values
+colnames(desc_stat) <- c('statistics','Gov. Expenditure (% of GDP)','GDP Growth (%)','Broad Money (% of GDP)','Savings (% of GDP)','Inflation (%)','Unemployment (%)')
+desc_stat[,-1] <-round(desc_stat[,-1],2)
+
+kable(desc_stat, caption = "Descriptive statistics of the variables (2017)")
+```
+
+\newpage
+
+# Model Specifications
+
+```{r}
+# Run Regressions ------------------------------------------------------------------
+# reg1: No controls, simple linear regression
+reg1 <- lm_robust(unemployment ~ inflation, data = df )
+#summary( reg1 )
+
+# reg2: No controls, simple linear regression, taking reciprocal of inflation
+reg2 <- lm_robust(unemployment ~ I(1/inflation), data = df )
+#summary( reg2 )
+
+# Models with control variables
+# reg3: control for GDP Growth (P.L.S with knot at 0%)
+reg3 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0), data = df )
+#summary( reg3 )
+
+# reg4: reg3 + Government Expenditure (P.L.S with knot at 22%)
+reg4 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(govexp, 22), data = df )
+#summary( reg4 )
+
+# reg5: reg4 + Broad Money (P.L.S with knot at 37%)
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg5 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(govexp, 22) + lspline(money, 37), data = df )
+#summary( reg5 )
+
+# reg6: reg3 + Broad Money (P.L.S with knot at 37%) + Savings (P.L.S with knot at 15%)
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg6 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(money, 37) + lspline(savings, 15), data = df )
+#summary( reg6 )
+
+# reg7: Final model
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg7 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(money, 37), data = df )
+#summary( reg7 )
+
+# reg8: Final model with inflation reciprocal
+reg8 <- lm_robust(unemployment ~ I(1/inflation) + lspline(gdpgrowth , 0) + lspline(money, 37), data = df )
+#summary( reg8 )
+```
+
+## 1. Main model
+Firstly, I take a look at the pattern of association for unemployment and inflation. For this I run a non-parametric (LOESS) regression. Based on it, they seem quite uncorrelated and they are indeed (see: Appendix for correlation matrix). These two charts also suggest that the relationship is pretty much far from inverse as we cannot see the resemblance to a hyperbola on the left and cannot see a pattern close to linear on the right. The latter comes from the fact that an inverse pattern should be linear when taken reciprocal of one of the variables, however in this case the reciprocal seems even more non-linear.
+
+```{r, fig_loess, fig.height = 3, fig.width = 7, fig.align = "center", fig.cap = "LOESS regression for unemployment and inflation (2017)"}
+# Plot simple linear regressions 2017
+
+plot1<- ggplot(df , aes(x = inflation, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs( subtitle = "Unemployment and Inflation",
+    y = "Unemployment (%)",
+    x = "Inflation (%)")
+  
+plot2<- ggplot(df , aes(x = 1/inflation, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs( subtitle = "Unemployment and 1/Inflation",
+        y = "Unemployment (%)",
+        x = "1/Inflation (%)")
+
+fig<-grid.arrange(arrangeGrob(plot1, plot2, ncol=2, nrow=1))
+```
+
+To elaborate on this, I run several regressions to uncover inflation's role with regard to unemployment. I try altogether 8 model setups and choose the following two to assess the Philips curve's validity: 
+$$ reg7: unemp = \alpha + \beta_1*inf + \beta_2*(gdpg<0) + \beta_3*(gdpg>=0) + \beta_4*(money<37) + \beta_5*(money>=37) $$
+$$ reg8: unemp = \alpha + \beta_1*1/inf + \beta_2*(gdpg<0) + \beta_3*(gdpg>=0) + \beta_4*(money<37) + \beta_5*(money>=37) $$
+   
+Looking at the regression results, I can see that neither models has a significant coefficient related to inflation. This backs our suspicion based on the LOESS regressions that there may be no inverse relationship between unemployment and inflation. In fact, it seems like there is no relationship at all. In regression 7 inflation and in regression 8 1/inflation are both considerably insignificant. The probability that this result is due to only chance is pretty low around 31% and 11% respectively eventhough I controlled for the economy's GDP growth and an broad money supply. The R squared is pretty low, around 15%, for both models but as my ultimate goal is causality it does not really matter.   
+
+
+```{r, fig_finals, results = 'asis', fig.align = "center"}
+# HTML --------------------------------------------------------------------
+htmltools::includeHTML(paste0(path,"out/model_comp_finals.html"))
+
+# PDF ---------------------------------------------------------------------
+# texreg(list(reg7,reg8),
+#        type = 'pdf',
+#        custom.header = list("Unemployment rate"=1:2),
+#        custom.model.names = c("(7)F","(8)F"),
+#        table = FALSE,
+#        custom.coef.map = list("(Intercept)"="intercept", "inflation" = "inflation", "I(1/inflation)" = "1/inflation", "lspline(gdpgrowth, 0)1" = "GDP Growth (<0%)", "lspline(gdpgrowth, 0)2"= "GDP Growth (>=0%)", "lspline(money, 37)1"="Broad Money (<37%)","lspline(money, 37)2"="Broad Money (>=37%)"),
+#        use.packages = FALSE,
+#        include.ci = FALSE,
+#        center = T,
+#        caption = "Analysis of the relatioship between unemployment and inflation. Data is for 2017 only."
+# )
+
+```
+
+I chose these two models because the control variables (with the exception of GDP Growth below 0) were significant at 5% significance level but they also made perfect sense to control for. I could also control for other variables like (savings, government expenditure, etc.) however the low number of observations limits model complexity. Taking into consideration that it is recommended to have 20 observations per explanatory variable I had to limit my models to 5 explanatory variables although there are many possible confounders that I don't have data on. One of them is for example the structure of labour force which may differ largely from country to country and play a substantial role in the development of unemployment rates.
+
+## 2. Parameter Stability
+Although I presented a model in which inflation was insignificant but what if I missed some important patterns by using the different explanatory variables. This is why I ran all the 8 regressions I already mentioned. I check if my statements based on regression 7 and 8 stand for other model setups as well. The results are the following:  
+
+
+```{r, results = 'asis' }
+# HTML --------------------------------------------------------------------
+htmltools::includeHTML(paste0(path,"out/model_comp.html"))
+
+# PDF ---------------------------------------------------------------------
+# texreg(list(reg1 , reg2 , reg3 , reg4 , reg5, reg6, reg7, reg8),
+#         type = 'pdf',
+#         custom.header = list("Unemployment rate"=1:8),
+#         custom.model.names = c("(1)","(2)","(3)","(4)","(5)","(6)","(7)F","(8)F"),
+#         custom.coef.names = c("intercept","inflation","1/inflation","GDP Growth (<0%)","GDP Growth (>=0%)",
+#                               "Gov. Exp. (<22%)","Gov. Exp. (>=22%)", "Broad Money (<37%)", "Broad Money (>=37%)",
+#                               "Savings (<15%)", "Savings (>=15%)"),
+# 
+#        table = FALSE,
+#        use.packages = FALSE,
+#        include.ci = FALSE,
+#        caption = "Analysis of the relatioship between unemployment and inflation. Data is for 2017 only."
+# )
+```
+  
+Based on this it seems like the main conclusion does not change even if I control for government expenditure and savings. There is no model setup that would result in a significant inflation coefficient at a 5% significance rate.
+
+To further substantiate my results I carry out robustness checks by dropping extreme values I already mentioned before at descriptive statistics. In the first case I drop observations with government expenditure above 30% while in the second case observations with inflation above 30%. The results of consequent models can be found in the appendix. Looking at the results my conclusion is backed up as these modifications does not make inflation's coefficient significant in case of any model setup.
+
+# Findings
+
+I carried out many regressions using data on countries from 2017 to check the causal relationship between unemployment and inflation. So is there one between the two? Although I controlled for some economic variables that ought to have relevance with regard to unemployment bringing closer the association to causality this way, causality is much more complex than these models could grasp.  
+
+Since I compare countries here there are many other aspects in which observations may differ from each other. In order to address these differences I would have to control for these variables as well, however this is not feasible since differences such as skill transferability and structure of labour market is hard to quantify. Plus due to low number of observations I cannot control for more than 4-5 variables. Therefore my final / main models provide good insights but too few observations inherently limit the credibility of findings.    
+
+I also experimented with other control variables like savings and government expenditure but the main conclusions remained the same. Eventually results suggest that there is not only a lack of inverse relationship but also a lack of linear relationship. This contradicts the theory behind the Philips curve.  
+
+An other thing to take into consideration when interpreting the results is that models only contain data from 2017. So in order to have a stronger claim against the Philips curve I need to check if the conclusions still stand for other years. Luckily data is available so I rerun my analysis on data from 2016 and 2018. There are some changes in the patterns due to this so I adjust my analysis. For example I changed knot places.  
+
+I rerun regressions and get the results that can be found in the appendix. In case of data from 2016 the main conclusions remain the same again. Nor inflation or 1/inflation is significant in the main regression models. However in case of data from 2018 the simple linear regression with 1/inflation the coefficient shows to be significant. Contrary to this the main models show insignificant coefficients values. In conclusion, the insights are eventually not that different. It seems like there is no relationship. Plus even the significant 1/inflation coefficient suggests a concave positive association between unemployment and inflation. To sum up, the conclusions drawn from model results based on data from 2017 seems to be stable in time so we can be more confident that model implications will be true in the future as well.
+
+# Summary
+My analysis focuses on the relationship between unemployment and inflation. I ran several regressions with different model setups using different control variables from GDP growth to broad money supply. I also included models that contained 1/inflation instead of inflation to test the inverse relationship stated by the Philips curve. Almost all regression results implied that there is no relationship between unemployment and inflation.   
+
+Results were backed up by robustness checks and additional analysis on external validity. Although this may sound convincing one has to seriously consider the limitations posed by the low number of observations and consequently the lack of other important control variables.
+
+\newpage
+
+# Appendix
+
+## I. Model Specification
+1. Investigate pattern of association for 2017 (LOESS charts) 
+```{r, fig17, fig.height = 8, fig.width = 8, fig.align = "center"}
+plot1 <- ggplot(df , aes(x = inflation, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs( subtitle = "Pattern of Association (LOESS)",
+        title = "Unemployment and Inflation",
+    y = "Unemployment (%)",
+    x = "Inflation (%)")
+
+plot2 <- ggplot(df , aes(x = 1/inflation, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs( subtitle = "Pattern of Association (LOESS)",
+        title = "Unemployment and 1/Inflation",
+        y = "Unemployment (%)",
+        x = "1/Inflation (%)")
+
+plot3 <- ggplot( df , aes(x = govexp, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Gov. Expenditure",
+       y = "Unemployment (%)",
+       x = "Gov. Expenditure (% of GDP)")
+
+plot4 <- ggplot( df , aes(x = money, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Broad Money",
+    y = "Unemployment (%)",
+    x = "Broad Money (% of GDP)")
+
+plot5 <- ggplot( df , aes(x = savings, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Savings",
+    y = "Unemployment (%)",
+    x = "Savings (% of GDP)")
+
+plot6 <- ggplot( df , aes(x = gdpgrowth, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and GDP Growth",
+    y = "Unemployment (%)",
+    x = "GDP Growth (%)")
+
+fig<-grid.arrange(arrangeGrob(plot1, plot2, plot3, plot4, plot5, plot6, ncol=2, nrow=3), heights=7)
+
+```
+
+\newpage
+
+2. Correlation matrix 2017
+```{r figcorr17, fig.height = 4, fig.align = "center"}
+corrmatrix(df,"2017")
+```
+
+3. Model Comparison 2017
+```{r}
+# Run Regressions ------------------------------------------------------------------
+
+# Avoiding overfitting: ca. 120 observations, 4-6 variables
+
+# Main regression: score4 = b0 + b1*stratio
+#   reg1: No controls, simple linear regression
+#   reg2: No controls, simple linear regression, taking reciprocal of inflation to check inverse relationship
+# Use better reg and control for:
+#   reg3: GDP Growth (P.L.S with knot at 0%)
+#   reg4: reg3 + Government Expenditure (P.L.S with knot at 22%)
+#   reg5: reg4 + Broad Money (P.L.S with knot at 37%)
+#   reg6: reg5 + Savings (P.L.S with knot at 15%)
+
+# Note: Weighted regression using population does not make sense variables can only be interpreted on aggregate (country) level
+
+# reg1: No controls, simple linear regression
+reg1 <- lm_robust(unemployment ~ inflation, data = df )
+
+# reg2: No controls, simple linear regression, taking reciprocal of inflation
+reg2 <- lm_robust(unemployment ~ I(1/inflation), data = df )
+
+# Models with control variables
+# reg3: control for GDP Growth (P.L.S with knot at 0%)
+reg3 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0), data = df )
+
+# reg4: reg3 + Government Expenditure (P.L.S with knot at 22%)
+reg4 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(govexp, 22), data = df )
+
+# reg5: reg4 + Broad Money (P.L.S with knot at 37%)
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg5 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(govexp, 22) + lspline(money, 37), data = df )
+
+# reg6: reg3 + Broad Money (P.L.S with knot at 37%) + Savings (P.L.S with knot at 15%)
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg6 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(money, 37) + lspline(savings, 15), data = df )
+
+# reg7: Final model
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg7 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(money, 37), data = df )
+
+# reg8: Final model with inflation reciprocal
+reg8 <- lm_robust(unemployment ~ I(1/inflation) + lspline(gdpgrowth , 0) + lspline(money, 37), data = df )
+
+```
+
+```{r, figregs17, fig.height = 4, fig.width = 7, fig.align = "center"}
+# Plot simple linear regressions 2017 ----------------------------------------------------------------
+plot1 <- ggplot( data = df, aes( x = inflation, y = unemployment) ) +
+  geom_point( color='black') +
+  geom_smooth( formula = y ~ x , method = lm , color = 'red' ) +
+  theme_bw() +
+  labs(title = "Unemployment and Inflation",
+       subtitle = "Reg1: Simple Linear Regression",
+       y = "Unemployment (%)",
+       x = "Inflation (%)")
+
+plot2 <- ggplot( data = df, aes( x = inflation, y = unemployment) ) +
+  geom_point( color='black') +
+  geom_smooth( formula = y ~ I(1/x) , method = lm , color = 'red' ) +
+  theme_bw() +
+  labs(title = "Unemployment and reciprocal of Inflation",
+       subtitle = "Reg2: Simple Linear Regression",
+       y = "Unemployment (%)",
+       x = "1 / Inflation (%)")
+
+fig<-grid.arrange(arrangeGrob(plot1, plot2, ncol=2, nrow=1))
+
+```
+
+```{r}
+reg_analysis <- function(df,rule,case) {
+  # reg1: No controls, simple linear regression
+  reg1 <- lm_robust(unemployment ~ inflation, data = df )
+  
+  # reg2: No controls, simple linear regression, taking reciprocal of inflation
+  reg2 <- lm_robust(unemployment ~ I(1/inflation), data = df )
+  
+  # Models with control variables
+  # reg3: control for GDP Growth (P.L.S with knot at 0%)
+  reg3 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0), data = df )
+  
+  # reg4: reg3 + Government Expenditure (P.L.S with knot at 22%)
+  reg4 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(govexp, 22), data = df )
+  
+  # reg5: reg4 + Broad Money (P.L.S with knot at 37%)
+  # Note: This is already 7 variables so additional explanatory variables would not really help
+  reg5 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(govexp, 22) + lspline(money, 37), data = df )
+  
+  # reg6: reg3 + Broad Money (P.L.S with knot at 37%) + Savings (P.L.S with knot at 15%)
+  # Note: This is already 7 variables so additional explanatory variables would not really help
+  reg6 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(money, 37) + lspline(savings, 15), data = df )
+  
+  # reg7: Final model 
+  # Note: This is already 7 variables so additional explanatory variables would not really help
+  reg7 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 0) + lspline(money, 37), data = df )
+  
+  # reg8: Final model with inflation reciprocal
+  reg8 <- lm_robust(unemployment ~ I(1/inflation) + lspline(gdpgrowth , 0) + lspline(money, 37), data = df )
+  
+  # HTML
+  texreg(list(reg1 , reg2 , reg3 , reg4 , reg5, reg6, reg7, reg8),
+          type = 'pdf',
+          custom.header = list("Unemployment rate"=1:8),
+          custom.model.names = c("(1)","(2)","(3)","(4)","(5)","(6)","(7)F","(8)F"),
+          custom.coef.names = c("intercept","inflation","1/inflation","GDP Growth (<0%)","GDP Growth (>=0%)",
+                                "Gov. Exp. (<22%)","Gov. Exp. (>=22%)", "Broad Money (<37%)", "Broad Money (>=37%)",
+                                "Savings (<15%)", "Savings (>=15%)"),
+  
+         table = FALSE,
+         use.packages = FALSE,
+         include.ci = FALSE,
+         caption = paste0("Analysis of the relatioship between unemployment and inflation. Data is for 2017 only. Dropped extreme values (",rule,").")
+  )  
+}
+```
+
+## II. Robustness Check
+1. Dropping observations that have government expenditure above 30%
+```{r, results = 'asis'}
+# HTML --------------------------------------------------------------------
+ htmltools::includeHTML(paste0(path,"out/model_comp_case1.html"))
+
+# PDF ---------------------------------------------------------------------
+# df1 <- filter(df, df$govexp < 30)
+# reg_analysis(df1,"observations that have government expenditure above 30%",1)
+```
+\newpage
+2. Dropping observations that have inflation above 30%
+```{r, results = 'asis'}
+# HTML --------------------------------------------------------------------
+ htmltools::includeHTML(paste0(path,"out/model_comp_case2.html"))
+
+# PDF ---------------------------------------------------------------------
+# df2 <- filter(df, df$inflation < 30)
+# reg_analysis(df2,"observations that have inflation above 30%",2)
+```
+\newpage
+## III. Checking External Validity
+
+1. Investigate pattern of association for 2016 (LOESS charts)
+```{r, fig16, fig.height = 8, fig.width = 7, fig.align = "center"}
+
+# Filter for year 2016
+df <- filter(df_all, df_all$year==2016)
+
+# Drop observations with an inflation rate below or equal to zero to take reciprocal properly
+df <- filter(df, df$inflation > 0)
+
+# Drop influential observations regarding government exp
+df <- filter(df, df$govexp < 30)
+
+plot1 <- ggplot(df , aes(x = inflation, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs( subtitle = "Pattern of Association (LOESS)",
+        title = "Unemployment and Inflation",
+    y = "Unemployment (%)",
+    x = "Inflation (%)")
+
+plot2 <- ggplot(df , aes(x = 1/inflation, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs( subtitle = "Pattern of Association (LOESS)",
+        title = "Unemployment and 1/Inflation",
+        y = "Unemployment (%)",
+        x = "1/Inflation (%)")
+
+plot3 <- ggplot( df , aes(x = govexp, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Gov. Expenditure",
+       y = "Unemployment (%)",
+       x = "Gov. Expenditure (% of GDP)") 
+  
+plot4 <- ggplot( df , aes(x = money, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Broad Money",
+    y = "Unemployment (%)",
+    x = "Broad Money (% of GDP)")
+  
+plot5 <- ggplot( df , aes(x = savings, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Savings",
+    y = "Unemployment (%)",
+    x = "Savings (% of GDP)")
+  
+plot6 <- ggplot( df , aes(x = gdpgrowth, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and GDP Growth",
+    y = "Unemployment (%)",
+    x = "GDP Growth (%)")
+
+fig<-grid.arrange(arrangeGrob(plot1, plot2, plot3, plot4, plot5, plot6, ncol=2, nrow=3), heights=7)
+
+```
+\newpage
+2. Correlation matrix 2016
+```{r figcorr16, fig.height = 4, fig.width = 7, fig.align = "center"}
+corrmatrix(df,"2016")
+```
+
+3. Model Comparison 2016
+
+```{r, figregs16, fig.height = 4, fig.width = 7, fig.align = "center"}
+# Plot simple linear regressions 2016 ----------------------------------------------------------------
+plot1 <- ggplot( data = df, aes( x = inflation, y = unemployment) ) + 
+  geom_point( color='black') +
+  geom_smooth( formula = y ~ x , method = lm , color = 'red' ) +
+  theme_bw() +
+  labs(title = "Unemployment and Inflation",
+       subtitle = "Reg1: Simple Linear Regression",
+       y = "Unemployment (%)",
+       x = "Inflation (%)")
+
+plot2 <- ggplot( data = df, aes( x = inflation, y = unemployment) ) + 
+  geom_point( color='black') +
+  geom_smooth( formula = y ~ I(1/x) , method = lm , color = 'red' ) +
+  theme_bw() +
+  labs(title = "Unemployment and reciprocal of Inflation",
+       subtitle = "Reg2: Simple Linear Regression",
+       y = "Unemployment (%)",
+       x = "1 / Inflation (%)")
+
+fig<-grid.arrange(arrangeGrob(plot1, plot2, ncol=2, nrow=1))
+```
+
+```{r}
+# Run Regressions 2016 ------------------------------------------------------------------
+# reg1: No controls, simple linear regression
+reg1 <- lm_robust(unemployment ~ inflation, data = df )
+#summary( reg1 )
+
+# reg2: No controls, simple linear regression, taking reciprocal of inflation
+reg2 <- lm_robust(unemployment ~ I(1/inflation), data = df )
+#summary( reg2 )
+
+# Models with control variables
+# reg3: control for GDP Growth (P.L.S with knot at 1%)
+reg3 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 1), data = df )
+#summary( reg3 )
+
+# reg4: reg3 + Government Expenditure
+reg4 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 1) + govexp, data = df )
+#summary( reg4 )
+
+# reg5: reg4 + Broad Money (P.L.S with knot at 65%)
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg5 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 1) + govexp + lspline(money, 65), data = df )
+#summary( reg5 )
+
+# reg6: reg3 + Broad Money (P.L.S with knot at 65%) + Savings (P.L.S with knot at 12%)
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg6 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 1) + lspline(money, 65) + lspline(savings, 12), data = df )
+#summary( reg6 )
+
+# reg7: Final model 
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg7 <- lm_robust(unemployment ~ inflation + lspline(gdpgrowth , 1) + lspline(money, 65), data = df )
+#summary( reg7 )
+
+# reg8: Final model with inflation reciprocal
+reg8 <- lm_robust(unemployment ~ I(1/inflation) + lspline(gdpgrowth , 1) + lspline(money, 65), data = df )
+#summary( reg8 )
+```
+
+```{r, results = 'asis'}
+# HTML --------------------------------------------------------------------
+htmltools::includeHTML(paste0(path,"out/model_comp_2016.html"))
+
+# PDF ---------------------------------------------------------------------
+# texreg(list(reg1 , reg2 , reg3 , reg4 , reg5, reg6, reg7, reg8),
+#         type = 'pdf',
+#         custom.header = list("Unemployment rate"=1:8),
+#         custom.model.names = c("(1)","(2)","(3)","(4)","(5)","(6)","(7)F","(8)F"),
+#         custom.coef.names = c("intercept","inflation","1/inflation","GDP Growth (<1%)","GDP Growth (>=1%)",
+#                               "Gov. Exp.", "Broad Money (<65%)", "Broad Money (>=65%)",
+#                               "Savings (<12%)", "Savings (>=12%)"),
+# 
+#        table = FALSE,
+#        use.packages = FALSE,
+#        include.ci = FALSE,
+#        caption = "Analysis of the relationship between unemployment and inflation. Data is for 2016 only. Dropped extreme values (observations that have government expenditure above 30%)."
+# )
+```
+\newpage
+4. Investigate pattern of association for 2018 (LOESS charts)
+```{r, fig18, fig.height = 10, fig.width = 8, fig.align = "center"}
+
+# Filter for year 2018
+df <- filter(df_all, df_all$year==2018)
+
+# Drop observations with an inflation rate below or equal to zero to take reciprocal properly
+df <- filter(df, df$inflation > 0)
+
+# Drop influential observations regarding government exp
+df <- filter(df, df$govexp < 30)
+
+# Drop influential observations regarding savings
+df <- filter(df, df$savings > 0)
+
+# Investigation of association patterns, plot loess for pairs of variables
+plot1 <- ggplot(df , aes(x = inflation, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs( subtitle = "Pattern of Association (LOESS)",
+        title = "Unemployment and Inflation",
+    y = "Unemployment (%)",
+    x = "Inflation (%)")
+
+plot2 <- ggplot(df , aes(x = 1/inflation, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs( subtitle = "Pattern of Association (LOESS)",
+        title = "Unemployment and 1/Inflation",
+        y = "Unemployment (%)",
+        x = "1/Inflation (%)")
+
+plot3 <- ggplot( df , aes(x = govexp, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Gov. Expenditure",
+       y = "Unemployment (%)",
+       x = "Gov. Expenditure (% of GDP)") 
+  
+plot4 <- ggplot( df , aes(x = money, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Broad Money",
+    y = "Unemployment (%)",
+    x = "Broad Money (% of GDP)")
+  
+plot5 <- ggplot( df , aes(x = savings, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and Savings",
+    y = "Unemployment (%)",
+    x = "Savings (% of GDP)")
+  
+plot6 <- ggplot( df , aes(x = gdpgrowth, y = unemployment)) +
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method="loess" , formula = y ~ x )+
+  labs(subtitle = "Pattern of Association (LOESS)",
+       title = "Unemployment and GDP Growth",
+    y = "Unemployment (%)",
+    x = "GDP Growth (%)")
+
+fig<-grid.arrange(arrangeGrob(plot1, plot2, plot3, plot4, plot5, plot6, ncol=2, nrow=3), heights=7)
+
+```
+\newpage
+5. Correlation matrix 2018
+```{r figcorr18, fig.height = 4, fig.width = 7, fig.align = "center"}
+corrmatrix(df,"2018")
+```
+
+6.Model Comparison 2018
+```{r, figregs18, fig.height = 4, fig.width = 7, fig.align = "center"}
+# Plot simple linear regressions 2018 ----------------------------------------------------------------
+plot1 <- ggplot( data = df, aes( x = inflation, y = unemployment) ) + 
+  geom_point( color='black') +
+  geom_smooth( formula = y ~ x , method = lm , color = 'red' ) +
+  theme_bw() +
+  labs(title = "Unemployment and Inflation",
+       subtitle = "Reg1: Simple Linear Regression",
+       y = "Unemployment (%)",
+       x = "Inflation (%)")
+
+plot2 <- ggplot( data = df, aes( x = inflation, y = unemployment) ) + 
+  geom_point( color='black') +
+  geom_smooth( formula = y ~ I(1/x) , method = lm , color = 'red' ) +
+  theme_bw() +
+  labs(title = "Unemployment and reciprocal of Inflation",
+       subtitle = "Reg2: Simple Linear Regression",
+       y = "Unemployment (%)",
+       x = "1 / Inflation (%)")
+
+fig<-grid.arrange(arrangeGrob(plot1, plot2, ncol=2, nrow=1))
+```
+
+```{r}
+# Run Regressions 2018 ------------------------------------------------------------------
+# reg1: No controls, simple linear regression
+reg1 <- lm_robust(unemployment ~ inflation, data = df )
+
+# reg2: No controls, simple linear regression, taking reciprocal of inflation
+reg2 <- lm_robust(unemployment ~ I(1/inflation), data = df )
+
+# Models with control variables
+# reg3: control for GDP Growth
+reg3 <- lm_robust(unemployment ~ inflation + gdpgrowth, data = df )
+
+# reg4: reg3 + Government Expenditure (P.L.S with knot at 17%) 
+reg4 <- lm_robust(unemployment ~ inflation + gdpgrowth + lspline(govexp, 17), data = df )
+
+# reg5: reg4 + Broad Money (P.L.S with knot at 37%) 
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg5 <- lm_robust(unemployment ~ inflation + gdpgrowth + lspline(govexp, 17) + lspline(money, 37), data = df )
+
+# reg6: reg3 + Broad Money (P.L.S with knot at 37%) + Savings (P.L.S with knot at 22%)
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg6 <- lm_robust(unemployment ~ inflation + gdpgrowth + lspline(money, 37) + lspline(savings, 22), data = df )
+
+# reg7: Final model 
+# Note: This is already 7 variables so additional explanatory variables would not really help
+reg7 <- lm_robust(unemployment ~ inflation + gdpgrowth + lspline(money, 37), data = df )
+
+# reg8: Final model with inflation reciprocal
+reg8 <- lm_robust(unemployment ~ I(1/inflation) + gdpgrowth + lspline(money, 37), data = df )
+```
+
+```{r, results = 'asis'}
+# HTML --------------------------------------------------------------------
+htmltools::includeHTML(paste0(path,"out/model_comp_2018.html"))
+
+# PDF ---------------------------------------------------------------------
+# texreg(list(reg1 , reg2 , reg3 , reg4 , reg5, reg6, reg7, reg8),
+#         type = 'pdf',
+#         custom.header = list("Unemployment rate"=1:8),
+#         custom.model.names = c("(1)","(2)","(3)","(4)","(5)","(6)","(7)F","(8)F"),
+#         custom.coef.names = c("intercept","inflation","1/inflation","GDP Growth", "Gov. Exp. (<17%)",
+#                               "Gov. Exp. (>=17%)", "Broad Money (<37%)", "Broad Money (>=37%)",
+#                               "Savings (<22%)", "Savings (>=22%)"),
+# 
+#        table = FALSE,
+#        use.packages = FALSE,
+#        include.ci = FALSE,
+#        caption = "Analysis of the relatioship between unemployment and inflation. Data is for 2016 only. Dropped extreme values (observations that have government expenditure above 30%)."
+# )
+```
