@@ -3,9 +3,14 @@
 # Analysis/Prediction Script
 # 
 # GOAL:of high-growth firms
-# Task is to help a company operating small and mid-size apartments hosting 2-6 guests. 
-# The company is set to price their new apartments not on the market. 
+# Build a model that assigns a probability of fast growth of a firm in the next two years. 
+# The target variable is profit_loss_year
 # Build a price prediction model.
+# Maintain profits over two-year period. 
+# Only count positive profits.
+# 2010-2012 train and test with CV with a holdout sample 
+# 2013-2015 external validity
+# 
 #
 # Data Source
 # Website: https://osf.io/b2ft9/
