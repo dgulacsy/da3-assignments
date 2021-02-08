@@ -2,8 +2,15 @@
 # DA3 Assignment 2 
 # Analysis/Prediction Script
 # 
-# GOAL:
-# of high-growth firms
+# GOAL:of high-growth firms
+# Build a model that assigns a probability of fast growth of a firm in the next two years. 
+# The target variable is profit_loss_year
+# Build a price prediction model.
+# Maintain profits over two-year period. 
+# Only count positive profits.
+# 2010-2012 train and test with CV with a holdout sample 
+# 2013-2015 external validity
+# 
 #
 # Data Source
 # Website: https://osf.io/b2ft9/
@@ -31,14 +38,16 @@ options(digits=3)
 df<-read_csv("data/raw/cs_bisnode_panel.csv")
 skim(df)
 
-# Feature Selection -------------------------------------------
-# Create Feature Selection Schema File
-fss(df)
+# Variable Selection -------------------------------------------
+# Create Variable Selection Schema File
+vss(df)
 
-# Import file containing feature selection strategy
-fss <- read_csv("data/raw/feature_selection_schema.csv")
+# Import file containing variable selection strategy
+vss <- read_csv("data/raw/cs_bisnode_panel.csvvariable_selection_schema.csv")
 
-# Import file containing feature selection strategy
-fss <- read_csv(paste0(data_dir,"raw/feature_selection_strat.csv"))
-unique(df$year)
+# Import file containing variable selection strategy
+vss <- read_csv(paste0(data_dir,"raw/feature_selection_strat.csv"))
+
 table(df$year)
+
+
