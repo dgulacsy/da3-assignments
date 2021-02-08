@@ -43,10 +43,10 @@ skim(df)
 vss(df)
 
 # Import file containing variable selection strategy
-vss <- read_csv("data/raw/cs_bisnode_panel.csvvariable_selection_schema.csv")
+vss <- read_csv("data/variable_selection_schema.csv")
 
 # Import file containing variable selection strategy
-vss <- read_csv(paste0(data_dir,"raw/feature_selection_strat.csv"))
+vss <- read_csv(paste0(data_dir,"data/variable_selection_schema.csv"))
 
 table(df$year)
 
