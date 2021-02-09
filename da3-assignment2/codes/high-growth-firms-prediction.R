@@ -39,11 +39,6 @@ options(digits=3)
 
 # Import data -------------------------------------------------------------
 df<-read_csv("data/raw/cs_bisnode_panel.csv")
-
-# Cleaning data -----------------------------------------------------------
-table(df$year)
-df<-filter(df,year !=2016)
-
 skim(df)
 
 # Create sample to experiment
