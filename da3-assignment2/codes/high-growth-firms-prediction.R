@@ -49,5 +49,3 @@ vss <- read_csv("data/variable_selection_schema.csv")
 vss <- read_csv(paste0(data_dir,"data/variable_selection_schema.csv"))
 
 table(df$year)
-
-
