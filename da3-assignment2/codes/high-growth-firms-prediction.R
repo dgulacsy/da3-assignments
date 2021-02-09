@@ -30,16 +30,22 @@ library(xtable)
 library(knitr)
 library(skimr)
 
+source("codes/helper.R")
+
 options(digits=3)
 
 # Import data -------------------------------------------------------------
 df<-read_csv("data/raw/cs_bisnode_panel.csv")
 skim(df)
 
-# Feature Selection -------------------------------------------
-fss_df<-data.frame(vars=colnames(df),example=as.character(df[1,]),use=NA,notes=NA)
-write_csv(fss_df,"data/raw/feature_selection_schema.csv",na = "")
+# Variable Selection -------------------------------------------
+# Create Variable Selection Schema File
+vss(df)
 
-# Import file containing feature selection strategy
-fss <- read_csv(paste0(data_dir,"raw/feature_selection_strat.csv"))
+# Import file containing variable selection strategy
+vss <- read_csv("data/variable_selection_schema.csv")
 
+# Import file containing variable selection strategy
+vss <- read_csv(paste0(data_dir,"data/variable_selection_schema.csv"))
+
+table(df$year)
