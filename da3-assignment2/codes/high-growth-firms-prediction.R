@@ -2,7 +2,7 @@
 # DA3 Assignment 2 
 # Analysis/Prediction Script
 # 
-# GOAL:of high-growth firms
+# GOAL:
 # Build a model that assigns a probability of fast growth of a firm in the next two years. 
 # The target variable is profit_loss_year
 # Build a price prediction model.
@@ -39,7 +39,7 @@ options(digits=3)
 
 # Import data -------------------------------------------------------------
 df<-read_csv("data/raw/cs_bisnode_panel.csv")
-skim(df)
+#skim(df)
 
 # Create sample to experiment
 #df<-df[sample(nrow(df),2000),]
@@ -96,6 +96,7 @@ df <- df %>%
 df <- df %>%
   group_by(comp_id) %>%
   mutate(d1_sales_mil_log = sales_mil_log - Lag(sales_mil_log, 1) ) %>%
+  mutate(d1_profit = profit - Lag(profit, 1)) %>% 
   ungroup()
 
 # replace w 0 for new firms + add dummy to capture it
@@ -115,7 +116,14 @@ df <- df %>%
   filter(!(sales_mil > 10)) %>%
   filter(!(sales_mil < 0.001))
 
+
 describe(df$is_fg)
+describe(df$profit/10^6)
+describe(df$sales_mil)
+
+# filter out error suspicious observation
+df <- df %>% filter(profit>(-10)*10^6)
+
 
 # Feature Engineering Part 2 -----------------------------------------------------
 
@@ -134,10 +142,11 @@ df <- df %>%
 # Firm characteristics
 df <- df %>%
   mutate(age2 = age^2,
-         foreign_management = as.numeric(foreign >= 0.5),
-         gender_m = factor(gender, levels = c("female", "male", "mix")),
-         m_region_loc = factor(region_m, levels = c("Central", "East", "West")))
-
+         ceo_foreign = factor(ifelse(foreign>=0.5,"foreign","domestic")),
+         ceo_female = factor(cut(female,breaks = c(-1,0.4,0.6,1),labels = c("male","balanced","female"))),
+         ceo_gender = factor(gender, levels = c("female", "male", "mix")),
+         ceo_origin = factor(origin, levels = c("domestic", "foreign", "mix")),
+         ceo_inoffice_years = inoffice_days/365)
 
 
 # Financial indicators, ratios --------------------------------------------
@@ -154,9 +163,10 @@ df <- df %>%
 
 # generate total assets
 df <- df %>%
-  mutate(total_assets_bs = intang_assets + curr_assets + fixed_assets)
-summary(df$total_assets_bs)
-
+  mutate(total_assets = intang_assets + curr_assets + fixed_assets,
+         total_liabs = total_assets-share_eq)
+summary(df$total_assets)
+summary(df$total_liabs)
 
 # Generate Ratios
 pl_names <- c("extra_exp","extra_inc",  "extra_profit_loss", "inc_bef_tax" ,"inventories",
@@ -168,12 +178,60 @@ bs_names <- c("intang_assets", "curr_liab", "fixed_assets", "liq_assets", "curr_
 df <- df %>%
   mutate_at(vars(pl_names), funs("pl"=./sales))
 
-# divide all bs_names elements by total_assets_bs and create new column for it
+# divide all bs_names elements by total_assets and create new column for it
 df <- df %>%
-  mutate_at(vars(bs_names), funs("bs"=ifelse(total_assets_bs == 0, 0, ./total_assets_bs)))
+  mutate_at(vars(bs_names), funs("bs"=ifelse(total_assets == 0, 0, ./total_assets)))
 
 
+# Special financial ratios ------------------------------------------------
 
+# Liquidity Ratios
+# Current ratio: company’s ability to pay off short-term liabilities with current assets
+df$curr_ratio<-df$curr_assets/df$curr_liab 
+
+# Acid-test ratio: measures a company’s ability to pay off short-term liabilities with quick assets
+df$acid_ratio<-(df$curr_assets+df$inventories)/df$curr_liab
+
+# Cash ratio: measures a company’s ability to pay off short-term liabilities with cash and cash equivalents
+df$cash_ratio<-df$liq_assets/df$curr_liab
+
+
+# Leverage Ratios
+# Debt ratio: measures the relative amount of a company’s assets that are provided from debt:
+df$dte_ratio<-df$total_liabs/df$total_assets
+
+# Debt to Equity ratio: calculates the weight of total debt and financial liabilities against shareholders’ equity
+df$dte_ratio<-df$total_liabs/df$share_eq
+df <- df %>%
+  mutate(dte_ratio=ifelse(share_eq==0,NA,
+                          ifelse(share_eq>0,total_liabs/share_eq,(-1)*total_liabs/share_eq))) 
+
+nrow(df[df$total_liabs<0,])
+describe(df[df$curr_liab<0,"curr_liab"])
+
+# Efficiency Ratios
+# Asset Turnover Ratio: measures a company’s ability to generate sales from assets
+df <- df %>%
+  mutate(at_ratio=ifelse(total_assets==0,NA,sales/total_assets))
+
+# Return on Assets ratio: measures how efficiently a company is using its assets to generate profit:
+df <- df %>%
+  mutate(roa_ratio=ifelse(total_assets==0,NA,profit/total_assets))
+
+ggplot(data = df, aes(x=roa_ratio, y=as.numeric(is_fg))) +
+  geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue", alpha=0.3) 
+
+describe(df$roa_ratio)
+
+# Return on Equity ratio: measures how efficiently a company is using its equity to generate profit
+df <- df %>%
+  mutate(roe_ratio=ifelse(share_eq==0,NA,
+                          ifelse(share_eq>0,profit/share_eq,(-1)*profit/share_eq))) 
+  
+ggplot(data = df, aes(x=roe_ratio, y=as.numeric(is_fg))) +
+  geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue", alpha=0.3) 
+
+describe(df$roe_ratio)
 # Creating flags, and winsorizing tails -----------------------------------
 
 # Variables that represent accounting items that cannot be negative (e.g. materials)
@@ -224,10 +282,58 @@ df <- df %>%
 
 # create factors
 df <- df %>%
-  mutate(urban_m = factor(urban_m, levels = c(1,2,3)),
+  mutate(urban = factor(urban_m, levels = c("capital","city","other")),
+         region = factor(region_m, levels = c("central", "east", "west")),
          ind2_cat = factor(ind2_cat, levels = sort(unique(df$ind2_cat))))
 
 df <- df %>%
   mutate(f_is_fg = factor(is_fg, levels = c(0,1)) %>%
-           recode(., `0` = 'no fast growth', `1` = "fast growth"))
+           recode(., `0` = 'no_fast_growth', `1` = "fast_growth"))
 
+# Feature Sets
+
+target <- c("if_fg")
+business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
+ceo<- c("ceo_inoffice_days","ceo_age","ceo_count",
+        "ceo_female","ceo_foreign","ceo_gender","ceo_origin")
+sales<-c("sales_mil_log","d1_sales_mil_log")
+financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
+                     "intang_assets","inventories","liq_assets","subscribed_cap",
+                     "share_eq","material_exp","personnel_exp","amort","profit")
+financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
+financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
+flags<- colnames(df %>% select(matches("*.flag.")))
+in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
+#financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
+
+
+
+# EDA ---------------------------------------------------------------------
+
+# Sales - Fast Growth
+df <- df %>%
+  mutate(sales_mil_log_sq=sales_mil_log^2)
+
+ggplot(data = df, aes(x=sales_mil_log, y=as.numeric(is_fg))) +
+  geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue") +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2), color="orange", se = F, size=1)+
+  geom_smooth(method="loess", se=F, colour="red", size=1.5, span=0.9) +
+  labs(x = "sales_mil_log",y = "Fast Growth") +
+  theme_bw()
+
+m1 <- lm(is_fg~sales_mil_log+sales_mil_log_sq,
+         data = df)
+summary(m1)
+
+# Profit - Fast Growth
+
+ggplot(data = df, aes(x=profit, y=as.numeric(is_fg))) +
+  geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue", alpha=0.3) +
+  geom_smooth(method = "lm", formula = y ~ x, color="orange", se = F, size=1)+
+  geom_smooth(method="loess", colour="red", size=1.5) +
+  labs(x = "sales_mil_log",y = "Fast Growth")
+
+
+m2 <- lm(is_fg~profit,
+         data = df)
+summary(m2)
