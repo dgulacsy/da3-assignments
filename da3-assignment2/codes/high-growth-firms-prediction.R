@@ -283,6 +283,10 @@ df <- df %>%
          region = factor(region_m, levels = c("Central", "East", "West")),
          ind2_cat = factor(ind2_cat, levels = sort(unique(df$ind2_cat))))
 
+df <- df %>%
+  mutate(is_fg = factor(is_fg, levels = c(0,1)) %>%
+           recode(., `0` = 'no_fast_gowth', `1` = "fast_growth"))
+
 # store comp_id as character
 df$comp_id<-as.character(df$comp_id)
 
