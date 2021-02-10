@@ -145,7 +145,7 @@ df <- df %>%
          ceo_foreign = factor(ifelse(foreign>=0.5,"foreign","domestic")),
          ceo_female = factor(cut(female,breaks = c(-1,0.4,0.6,1),labels = c("male","balanced","female"))),
          ceo_gender = factor(gender, levels = c("female", "male", "mix")),
-         ceo_origin = factor(origin, levels = c("domestic", "foreign", "mix")),
+         ceo_origin = factor(df$origin, levels = c("Domestic", "Foreign", "mix")),
          ceo_inoffice_years = inoffice_days/365)
 
 
@@ -187,32 +187,42 @@ df <- df %>%
 
 # Liquidity Ratios
 # Current ratio: company’s ability to pay off short-term liabilities with current assets
-df$curr_ratio<-df$curr_assets/df$curr_liab 
-
-# Acid-test ratio: measures a company’s ability to pay off short-term liabilities with quick assets
-df$acid_ratio<-(df$curr_assets+df$inventories)/df$curr_liab
+df <- df %>%
+  mutate(curr_ratio=ifelse(curr_liab==0,curr_assets/1,
+                           ifelse(curr_liab>0,curr_assets/curr_liab,
+                                  ifelse(curr_assets>0,(curr_assets-curr_liab)/1,curr_liab/curr_assets))))
+describe(df$curr_ratio)
 
 # Cash ratio: measures a company’s ability to pay off short-term liabilities with cash and cash equivalents
-df$cash_ratio<-df$liq_assets/df$curr_liab
+df <- df %>%
+  mutate(cash_ratio=ifelse(curr_liab==0,liq_assets/1,
+                           ifelse(curr_liab>0,liq_assets/curr_liab,
+                                  ifelse(liq_assets>0,(liq_assets+curr_liab)/1,curr_liab/liq_assets))))
 
+describe(df$cash_ratio)
 
 # Leverage Ratios
 # Debt ratio: measures the relative amount of a company’s assets that are provided from debt:
-df$dte_ratio<-df$total_liabs/df$total_assets
+df <- df %>%
+  mutate(dta_ratio=ifelse(total_liabs<0,0,
+                          ifelse(total_assets==0,total_liabs/1,total_liabs/total_assets)))
+
+describe(df$dta_ratio)
 
 # Debt to Equity ratio: calculates the weight of total debt and financial liabilities against shareholders’ equity
 df$dte_ratio<-df$total_liabs/df$share_eq
 df <- df %>%
-  mutate(dte_ratio=ifelse(share_eq==0,NA,
-                          ifelse(share_eq>0,total_liabs/share_eq,(-1)*total_liabs/share_eq))) 
+  mutate(dte_ratio=ifelse(share_eq==0,total_liabs/1,
+                          ifelse(share_eq>0,total_liabs/share_eq,total_liabs/1))) 
 
-nrow(df[df$total_liabs<0,])
-describe(df[df$curr_liab<0,"curr_liab"])
+describe(df$dte_ratio)
 
 # Efficiency Ratios
 # Asset Turnover Ratio: measures a company’s ability to generate sales from assets
 df <- df %>%
   mutate(at_ratio=ifelse(total_assets==0,NA,sales/total_assets))
+
+describe(df$at_ratio)
 
 # Return on Assets ratio: measures how efficiently a company is using its assets to generate profit:
 df <- df %>%
@@ -232,6 +242,7 @@ ggplot(data = df, aes(x=roe_ratio, y=as.numeric(is_fg))) +
   geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue", alpha=0.3) 
 
 describe(df$roe_ratio)
+
 # Creating flags, and winsorizing tails -----------------------------------
 
 # Variables that represent accounting items that cannot be negative (e.g. materials)
@@ -280,21 +291,23 @@ df <- df %>%
            ifelse(is.na(.), mean(., na.rm = TRUE), .),
          ceo_young = as.numeric(ceo_age < 40))
 
+
+
 # create factors
 df <- df %>%
-  mutate(urban = factor(urban_m, levels = c("capital","city","other")),
-         region = factor(region_m, levels = c("central", "east", "west")),
+  mutate(urban = factor(urban_m, levels = c(1,2,3)) %>%
+           recode(., `1` = 'capital', `2` = "city",`3` = "other"),
+         region = factor(region_m, levels = c("Central", "East", "West")),
          ind2_cat = factor(ind2_cat, levels = sort(unique(df$ind2_cat))))
 
-df <- df %>%
-  mutate(f_is_fg = factor(is_fg, levels = c(0,1)) %>%
-           recode(., `0` = 'no_fast_growth', `1` = "fast_growth"))
+# store comp_id as character
+df$comp_id<-as.character(df$comp_id)
 
-# Feature Sets
-
-target <- c("if_fg")
+# Variable Sets
+aux<- c("comp_id")
+target <- c("is_fg")
 business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
-ceo<- c("ceo_inoffice_days","ceo_age","ceo_count",
+ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
         "ceo_female","ceo_foreign","ceo_gender","ceo_origin")
 sales<-c("sales_mil_log","d1_sales_mil_log")
 financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
@@ -302,11 +315,18 @@ financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
                      "share_eq","material_exp","personnel_exp","amort","profit")
 financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
+financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
 flags<- colnames(df %>% select(matches("*.flag.")))
 in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
 #financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
 
+# Keep only relevant variables for modeling
+keep<-c(aux,target,business,ceo,sales,financial_basic,financial_ext,financial_basic_ratios,financial_ext_ratios,flags)
+work_df <- df %>% select(keep)
+skim(work_df)
 
+# Write out work file
+write_rds(work_df, "data/clean/fast-growth-firms-workfile.rds")
 
 # EDA ---------------------------------------------------------------------
 
@@ -337,9 +357,4 @@ ggplot(data = df, aes(x=profit, y=as.numeric(is_fg))) +
 m2 <- lm(is_fg~profit,
          data = df)
 summary(m2)
-
-
-
-# export data -------------------------------------------------------------
-
-write_rds(df, "data/clean/bisnode_clean.rds")
+==== BASE ====
