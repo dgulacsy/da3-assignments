@@ -28,9 +28,6 @@ library(Hmisc)
 
 # Visualization
 library(ggplot2)
-library(stargazer)
-library(xtable)
-library(knitr)
 library(skimr)
 
 source("codes/helper.R")
@@ -187,30 +184,34 @@ df <- df %>%
 
 # Liquidity Ratios
 # Current ratio: company’s ability to pay off short-term liabilities with current assets
-df$curr_ratio<-df$curr_assets/df$curr_liab 
 df <- df %>%
-  mutate(curr_ratio=ifelse(curr_liab==0,NA,
-                           ifelse(curr_liab>0,curr_assets/curr_liab,(-1)*curr_assets/curr_liab)))
+  mutate(curr_ratio=ifelse(curr_liab==0,curr_assets/1,
+                           ifelse(curr_liab>0,curr_assets/curr_liab,
+                                  ifelse(curr_assets>0,(curr_assets-curr_liab)/1,curr_liab/curr_assets))))
+describe(df$curr_ratio)
 
 # Cash ratio: measures a company’s ability to pay off short-term liabilities with cash and cash equivalents
 df <- df %>%
-  mutate(cash_ratio=ifelse(curr_liab==0,NA,
-                          ifelse(curr_liab>0,liq_assets/curr_liab,(-1)*liq_assets/curr_liab)))
+  mutate(cash_ratio=ifelse(curr_liab==0,liq_assets/1,
+                           ifelse(curr_liab>0,liq_assets/curr_liab,
+                                  ifelse(liq_assets>0,(liq_assets+curr_liab)/1,curr_liab/liq_assets))))
 
-nrow(df[df$curr_liab<0 & df$liq_assets<0,])
+describe(df$cash_ratio)
 
 # Leverage Ratios
 # Debt ratio: measures the relative amount of a company’s assets that are provided from debt:
 df <- df %>%
-  mutate(dta_ratio=ifelse(total_assets==0,NA,total_liabs/total_assets))
+  mutate(dta_ratio=ifelse(total_liabs<0,0,
+                          ifelse(total_assets==0,total_liabs/1,total_liabs/total_assets)))
 
+describe(df$dta_ratio)
 
 # Debt to Equity ratio: calculates the weight of total debt and financial liabilities against shareholders’ equity
 df <- df %>%
-  mutate(dte_ratio=ifelse(share_eq==0,NA,
-                          ifelse(share_eq>0,total_liabs/share_eq,(-1)*total_liabs/share_eq))) 
+  mutate(dte_ratio=ifelse(share_eq==0,total_liabs/1,
+                          ifelse(share_eq>0,total_liabs/share_eq,total_liabs/1))) 
 
-describe(df[df$curr_liab<0,"curr_liab"])
+describe(df$dte_ratio)
 
 # Efficiency Ratios
 # Asset Turnover Ratio: measures a company’s ability to generate sales from assets
@@ -231,6 +232,7 @@ df <- df %>%
                           ifelse(share_eq>0,profit/share_eq,(-1)*profit/share_eq))) 
 
 describe(df$roe_ratio)
+
 # Creating flags, and winsorizing tails -----------------------------------
 
 # Variables that represent accounting items that cannot be negative (e.g. materials)
@@ -289,11 +291,8 @@ df <- df %>%
   mutate(f_is_fg = factor(is_fg, levels = c(0,1)) %>%
            recode(., `0` = 'no_fast_growth', `1` = "fast_growth"))
 
-# Write out workfile
-write_rds(df, "data/clean/fast-growth-firms-workfile.rds")
-
-# Feature Sets
-
+# Variable Sets
+aux<- c("comp_id")
 target <- c("is_fg")
 business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
 ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
@@ -304,11 +303,15 @@ financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
                      "share_eq","material_exp","personnel_exp","amort","profit")
 financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
+financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
 flags<- colnames(df %>% select(matches("*.flag.")))
-in_progress <- c("curr_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
-#financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
 
+# Keep only relevant variables for modeling
+keep<-c(aux,target,business,ceo,sales,financial_basic,financial_ext,financial_basic_ratios,financial_ext_ratios,flags)
+work_df <- df %>% select(keep)
 
+# Write out work file
+write_rds(work_df, "data/clean/fast-growth-firms-workfile.rds")
 
 # EDA ---------------------------------------------------------------------
 
