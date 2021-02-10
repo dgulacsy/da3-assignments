@@ -51,6 +51,7 @@ data_test <- df[-train_indices, ]
 
 ```{r}
 target <- c("is_fg")
+target_f <- c("f_is_fg")
 business<- c("ind2_cat","labor_avg","age","age2","new") # "urban","region"
 ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
         "ceo_female","ceo_foreign","ceo_gender") # ceo_origin
@@ -67,9 +68,9 @@ in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","
 formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
 formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + ")))) 
 formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_gbm = vars(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags)
-formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
-formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
+formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
+formula_knn = formula(paste0(target_f, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
+formula_enet = formula(paste0(target_f, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
 ```
 
 # EDA
@@ -84,10 +85,6 @@ ggpairs(df, columns = c(target, business))
 
 ```{r}
 model_lpm <- lm(formula_lpm, data = data_train)
-# 
-# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-#   contrasts can be applied only to factors with 2 or more levels
-# 
 model_lpm
 ```
 
@@ -96,10 +93,10 @@ model_lpm
 
 ```{r}
 model_logit <- glm(formula = formula_log, data = data_train, family = "binomial")
-# 
-# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-#   contrasts can be applied only to factors with 2 or more levels
-# 
+#
+# Warning message:
+# glm.fit: fitted probabilities numerically 0 or 1 occurred
+#
 model_logit
 ```
 
@@ -108,17 +105,18 @@ model_logit
 
 ```{r}
 model_probit <- glm(formula = formula_log, data = data_train, family = binomial(link = "probit"))
-# 
-# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-#   contrasts can be applied only to factors with 2 or more levels
-# 
+#
+# Warning message:
+# glm.fit: fitted probabilities numerically 0 or 1 occurred
+#
+model_probit
 ```
 
 # Random Forest
 
 ```{r}
-trctrl <- trainControl(method = "cv", number = 10)
-
+trctrl <- trainControl(method = "cv", number = 3)
+trctrl$verboseIter <- TRUE
 
 start <- Sys.time()
 # use all variables?
@@ -129,22 +127,20 @@ model_rf <- train(formula_rf,
                   num.threads = 7,
                  na.action = na.omit)
 end <- Sys.time()
-# 
-# Error: Please use column names for `x`
-# 
 
 send_message()
-print(end - start)
 model_rf
 postResample(data_test$is_fg, predict(model_rf, data_test))
 
 # colnames(data_test, 2)
+print(end - start)
 ```
 
 ```{r}
+## Alternative tuning
 train_control <- trainControl(
   method = "cv",
-  n = 5,
+  n = 3,
   classProbs = TRUE, # same as probability = TRUE in ranger
   # summaryFunction = twoClassSummaryExtended,
   savePredictions = TRUE
@@ -156,22 +152,6 @@ tune_grid <- expand.grid(
   .splitrule = "gini",
   .min.node.size = c(10, 15)
 )
-
-# getModelInfo("ranger")
-set.seed(13505)
-rf_model_p <- train(
-  data_train[formula_rf], data_train[["is_fg"]],
-  method = "ranger",
-  data = data_train,
-  tuneGrid = tune_grid,
-  trControl = train_control
-)
-
-# 
-# model fit failed for Fold5: mtry=7, splitrule=gini, min.node.size=15 Error in ranger::ranger(dependent.variable.name = ".outcome", data = x,  : 
-#   formal argument "data" matched by multiple actual arguments
-# 
-  
 ```
 
 # Boosting
@@ -180,22 +160,19 @@ rf_model_p <- train(
 start_time <- Sys.time()
 # Train model with preprocessing & repeated cv
 trctrl <- trainControl(method = "repeatedcv", 
-                       number = 5, 
-                       repeats = 3, 
-                       verboseIter = FALSE)
+                       number = 3, 
+                       repeats = 1, 
+                       verboseIter = TRUE)
 
 model_gbm <- train(formula_gbm,
                    data = data_train,
                    method = "gbm",
                    trControl = trctrl,
                    verbose = 0,
-                   num.threads = 7)
+                   # num.threads = 7,
+                   na.action = na.omit)
 end_time <- Sys.time()
 model_gbm
-
-# 
-# Error: Please use column names for `x`
-# 
 
 print(end_time - start_time)
 send_message()
@@ -206,25 +183,29 @@ send_message()
 
 ```{r}
 set.seed(1234)
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
+trctrl <- trainControl(method = "repeatedcv", number = 3, repeats = 1, verboseIter = TRUE)
+
 
 model_knn <- train(formula_knn, data = data_train, method = "knn",
                  trControl=trctrl,
                  preProcess=c("center", "scale"),
                  tuneLength=20,
-                 num.threads = 7
+                 # num.threads = 7
+                 na.action = na.omit
                  #tuneGrid = data.frame(k=c(2:8))
                  )
 model_knn
 
-# 
-# Error: Please use column names for `x`
-# 
-
 send_message()
 
-lmElasticNetCaret
-knnModelRoc <- roc(predictor = predict(model_knn, data_test, type='prob', decision.values=T)$is_fg, response = data_test$is_fg)
+
+knnModelRoc <- roc(predictor = predict(model_knn, data_test, type='prob', decision.values=T)$f_is_fg, response = data_test$f_is_fg)
+
+# 
+# Error in roc.default(predictor = predict(model_knn, data_test, type = "prob",  : 
+#  No valid data provided.
+#
+
 knnModelRoc
 plot(knnModelRoc)
 
@@ -235,7 +216,7 @@ postResample(SpamTest$count, predict(model_knn, SpamTest))
 # Elastic Net
 ```{r}
 set.seed(1234)
-trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary)
+trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary, verboseIter = TRUE, number = 3)
 
 lmElasticNetCaret <- train(formula_enet, 
                  data = data_train, 
@@ -243,12 +224,15 @@ lmElasticNetCaret <- train(formula_enet,
                  trControl=trctrl,
                  tuneLength=5,
                  metric='AUC',
-                 num.threads = 7
+                 # num.threads = 7,
+                 na.action = na.omit
                  #tuneGrid = data.frame(lambda=seq(0.1,1,0.1), alpha=rep(1, 10))
 )
 
 # 
-# Error: Please use column names for `x`
+# Warning message:
+# In train.default(x, y, weights = w, ...) :
+#  The metric "AUC" was not in the result set. ROC will be used instead.
 # 
 
 ```
@@ -267,12 +251,15 @@ ridge_tune_grid <- expand.grid(
 
 enet_tune_grid <- expand.grid(
   "alpha" = seq(0, 1, by = 0.1),
-  "lambda" = union(lasso_tune_grid[["lambda"]], ridge_tune_grid[["lambda"]])
+  "lambda" = union(lasso_tune_grid[["lambda"]], ridge_tune_grid[["lambda"]]),
+  verboseIter = TRUE,
+  method = "cv",
+  number = 3
 )
 
 set.seed(857)
 enet_fit <- train(
-  formula(formula_enet),
+  formula_enet,
   data = data_train,
   method = "glmnet",
   preProcess = c("center", "scale"),
