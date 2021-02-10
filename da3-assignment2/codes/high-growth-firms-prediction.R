@@ -24,8 +24,6 @@ rm(list=ls())
 # General
 library(tidyverse)
 library(Hmisc)
-# Modelling
-
 # Visualization
 library(ggplot2)
 library(skimr)
@@ -142,7 +140,7 @@ df <- df %>%
          ceo_foreign = factor(ifelse(foreign>=0.5,"foreign","domestic")),
          ceo_female = factor(cut(female,breaks = c(-1,0.4,0.6,1),labels = c("male","balanced","female"))),
          ceo_gender = factor(gender, levels = c("female", "male", "mix")),
-         ceo_origin = factor(origin, levels = c("domestic", "foreign", "mix")),
+         ceo_origin = factor(df$origin, levels = c("Domestic", "Foreign", "mix")),
          ceo_inoffice_years = inoffice_days/365)
 
 
@@ -281,15 +279,17 @@ df <- df %>%
            ifelse(is.na(.), mean(., na.rm = TRUE), .),
          ceo_young = as.numeric(ceo_age < 40))
 
+
+
 # create factors
 df <- df %>%
-  mutate(urban = factor(urban_m, levels = c("capital","city","other")),
-         region = factor(region_m, levels = c("central", "east", "west")),
+  mutate(urban = factor(urban_m, levels = c(1,2,3)) %>%
+           recode(., `1` = 'capital', `2` = "city",`3` = "other"),
+         region = factor(region_m, levels = c("Central", "East", "West")),
          ind2_cat = factor(ind2_cat, levels = sort(unique(df$ind2_cat))))
 
-df <- df %>%
-  mutate(f_is_fg = factor(is_fg, levels = c(0,1)) %>%
-           recode(., `0` = 'no_fast_growth', `1` = "fast_growth"))
+# store comp_id as character
+df$comp_id<-as.character(df$comp_id)
 
 # Variable Sets
 aux<- c("comp_id")
@@ -309,6 +309,7 @@ flags<- colnames(df %>% select(matches("*.flag.")))
 # Keep only relevant variables for modeling
 keep<-c(aux,target,business,ceo,sales,financial_basic,financial_ext,financial_basic_ratios,financial_ext_ratios,flags)
 work_df <- df %>% select(keep)
+skim(work_df)
 
 # Write out work file
 write_rds(work_df, "data/clean/fast-growth-firms-workfile.rds")
