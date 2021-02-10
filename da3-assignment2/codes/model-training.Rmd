@@ -28,7 +28,7 @@ df <- read_rds("data/clean/bisnode_clean.rds")
 # df$f_is_fg <- as.factor(ifelse(df$f_is_fg == "fast growth", "fast_growth", "no_fast_growth"))
 
 # create smaller sample to test models
-samp_size <- round(nrow(df) / 5)
+samp_size <- round(nrow(df) / 20)
 set.seed(1234)
 df <- sample_n(df, samp_size)
 nrow(df)
@@ -51,9 +51,9 @@ data_test <- df[-train_indices, ]
 
 ```{r}
 target <- c("is_fg")
-business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
+business<- c("ind2_cat","labor_avg","age","age2","new") # "urban","region"
 ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
-        "ceo_female","ceo_foreign","ceo_gender","ceo_origin")
+        "ceo_female","ceo_foreign","ceo_gender") # ceo_origin
 sales<-c("sales_mil_log","d1_sales_mil_log")
 financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
                      "intang_assets","inventories","liq_assets","subscribed_cap",
@@ -66,7 +66,7 @@ in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","
 
 formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
 formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + ")))) 
-formula_rf = c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags)
+formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
 formula_gbm = vars(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags)
 formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
 formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
@@ -119,22 +119,24 @@ model_probit <- glm(formula = formula_log, data = data_train, family = binomial(
 ```{r}
 trctrl <- trainControl(method = "cv", number = 10)
 
+
+start <- Sys.time()
 # use all variables?
-model_rf <- train(x = vars(formula_rf),
-                  y = data_train$is_fg,
+model_rf <- train(formula_rf,
                   data = data_train, 
                   method = "rf",
                   trControl=trctrl,
                   num.threads = 7,
                  na.action = na.omit)
-
+end <- Sys.time()
 # 
 # Error: Please use column names for `x`
 # 
 
 send_message()
-model_caret
-postResample(data_test$is_fg, predict(model_caret, data_test))
+print(end - start)
+model_rf
+postResample(data_test$is_fg, predict(model_rf, data_test))
 
 # colnames(data_test, 2)
 ```
