@@ -188,25 +188,28 @@ df <- df %>%
 # Liquidity Ratios
 # Current ratio: company’s ability to pay off short-term liabilities with current assets
 df$curr_ratio<-df$curr_assets/df$curr_liab 
-
-# Acid-test ratio: measures a company’s ability to pay off short-term liabilities with quick assets
-df$acid_ratio<-(df$curr_assets+df$inventories)/df$curr_liab
+df <- df %>%
+  mutate(curr_ratio=ifelse(curr_liab==0,NA,
+                           ifelse(curr_liab>0,curr_assets/curr_liab,(-1)*curr_assets/curr_liab)))
 
 # Cash ratio: measures a company’s ability to pay off short-term liabilities with cash and cash equivalents
-df$cash_ratio<-df$liq_assets/df$curr_liab
+df <- df %>%
+  mutate(cash_ratio=ifelse(curr_liab==0,NA,
+                          ifelse(curr_liab>0,liq_assets/curr_liab,(-1)*liq_assets/curr_liab)))
 
+nrow(df[df$curr_liab<0 & df$liq_assets<0,])
 
 # Leverage Ratios
 # Debt ratio: measures the relative amount of a company’s assets that are provided from debt:
-df$dte_ratio<-df$total_liabs/df$total_assets
+df <- df %>%
+  mutate(dta_ratio=ifelse(total_assets==0,NA,total_liabs/total_assets))
+
 
 # Debt to Equity ratio: calculates the weight of total debt and financial liabilities against shareholders’ equity
-df$dte_ratio<-df$total_liabs/df$share_eq
 df <- df %>%
   mutate(dte_ratio=ifelse(share_eq==0,NA,
                           ifelse(share_eq>0,total_liabs/share_eq,(-1)*total_liabs/share_eq))) 
 
-nrow(df[df$total_liabs<0,])
 describe(df[df$curr_liab<0,"curr_liab"])
 
 # Efficiency Ratios
@@ -214,12 +217,11 @@ describe(df[df$curr_liab<0,"curr_liab"])
 df <- df %>%
   mutate(at_ratio=ifelse(total_assets==0,NA,sales/total_assets))
 
+describe(df$at_ratio)
+
 # Return on Assets ratio: measures how efficiently a company is using its assets to generate profit:
 df <- df %>%
   mutate(roa_ratio=ifelse(total_assets==0,NA,profit/total_assets))
-
-ggplot(data = df, aes(x=roa_ratio, y=as.numeric(is_fg))) +
-  geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue", alpha=0.3) 
 
 describe(df$roa_ratio)
 
@@ -227,9 +229,6 @@ describe(df$roa_ratio)
 df <- df %>%
   mutate(roe_ratio=ifelse(share_eq==0,NA,
                           ifelse(share_eq>0,profit/share_eq,(-1)*profit/share_eq))) 
-  
-ggplot(data = df, aes(x=roe_ratio, y=as.numeric(is_fg))) +
-  geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue", alpha=0.3) 
 
 describe(df$roe_ratio)
 # Creating flags, and winsorizing tails -----------------------------------
@@ -290,9 +289,12 @@ df <- df %>%
   mutate(f_is_fg = factor(is_fg, levels = c(0,1)) %>%
            recode(., `0` = 'no_fast_growth', `1` = "fast_growth"))
 
+# Write out workfile
+write_rds(df, "data/clean/fast-growth-firms-workfile.rds")
+
 # Feature Sets
 
-target <- c("if_fg")
+target <- c("is_fg")
 business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
 ceo<- c("ceo_inoffice_days","ceo_age","ceo_count",
         "ceo_female","ceo_foreign","ceo_gender","ceo_origin")
@@ -303,7 +305,7 @@ financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
 financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
 flags<- colnames(df %>% select(matches("*.flag.")))
-in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
+in_progress <- c("curr_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
 #financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
 
 
