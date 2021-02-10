@@ -216,8 +216,6 @@ describe(df$dte_ratio)
 df <- df %>%
   mutate(at_ratio=ifelse(total_assets==0,NA,sales/total_assets))
 
-describe(df$at_ratio)
-
 # Return on Assets ratio: measures how efficiently a company is using its assets to generate profit:
 df <- df %>%
   mutate(roa_ratio=ifelse(total_assets==0,NA,profit/total_assets))
@@ -230,7 +228,6 @@ df <- df %>%
                           ifelse(share_eq>0,profit/share_eq,(-1)*profit/share_eq))) 
 
 describe(df$roe_ratio)
-
 # Creating flags, and winsorizing tails -----------------------------------
 
 # Variables that represent accounting items that cannot be negative (e.g. materials)
@@ -279,8 +276,6 @@ df <- df %>%
            ifelse(is.na(.), mean(., na.rm = TRUE), .),
          ceo_young = as.numeric(ceo_age < 40))
 
-
-
 # create factors
 df <- df %>%
   mutate(urban = factor(urban_m, levels = c(1,2,3)) %>%
@@ -305,6 +300,8 @@ financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
 financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
 flags<- colnames(df %>% select(matches("*.flag.")))
+in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
+#financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
 
 # Keep only relevant variables for modeling
 keep<-c(aux,target,business,ceo,sales,financial_basic,financial_ext,financial_basic_ratios,financial_ext_ratios,flags)
