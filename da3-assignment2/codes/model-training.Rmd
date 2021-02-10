@@ -84,10 +84,10 @@ ggpairs(df, columns = c(target, business))
 
 ```{r}
 model_lpm <- lm(formula_lpm, data = data_train)
-"""
-Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-  contrasts can be applied only to factors with 2 or more levels
-"""
+# 
+# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
+#   contrasts can be applied only to factors with 2 or more levels
+# 
 model_lpm
 ```
 
@@ -96,10 +96,10 @@ model_lpm
 
 ```{r}
 model_logit <- glm(formula = formula_log, data = data_train, family = "binomial")
-"""
-Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-  contrasts can be applied only to factors with 2 or more levels
-"""
+# 
+# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
+#   contrasts can be applied only to factors with 2 or more levels
+# 
 model_logit
 ```
 
@@ -108,10 +108,10 @@ model_logit
 
 ```{r}
 model_probit <- glm(formula = formula_log, data = data_train, family = binomial(link = "probit"))
-"""
-Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-  contrasts can be applied only to factors with 2 or more levels
-"""
+# 
+# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
+#   contrasts can be applied only to factors with 2 or more levels
+# 
 ```
 
 # Random Forest
@@ -128,9 +128,10 @@ model_rf <- train(x = vars(formula_rf),
                   num.threads = 7,
                  na.action = na.omit)
 
-"""
-Error: Please use column names for `x`
-"""
+# 
+# Error: Please use column names for `x`
+# 
+
 send_message()
 model_caret
 postResample(data_test$is_fg, predict(model_caret, data_test))
@@ -164,10 +165,11 @@ rf_model_p <- train(
   trControl = train_control
 )
 
-'''
-model fit failed for Fold5: mtry=7, splitrule=gini, min.node.size=15 Error in ranger::ranger(dependent.variable.name = ".outcome", data = x,  : 
-  formal argument "data" matched by multiple actual arguments
-'''
+# 
+# model fit failed for Fold5: mtry=7, splitrule=gini, min.node.size=15 Error in ranger::ranger(dependent.variable.name = ".outcome", data = x,  : 
+#   formal argument "data" matched by multiple actual arguments
+# 
+  
 ```
 
 # Boosting
@@ -188,9 +190,11 @@ model_gbm <- train(formula_gbm,
                    num.threads = 7)
 end_time <- Sys.time()
 model_gbm
-"""
-Error: Please use column names for `x`
-"""
+
+# 
+# Error: Please use column names for `x`
+# 
+
 print(end_time - start_time)
 send_message()
 ```
@@ -210,9 +214,11 @@ model_knn <- train(formula_knn, data = data_train, method = "knn",
                  #tuneGrid = data.frame(k=c(2:8))
                  )
 model_knn
-"""
-Error: Please use column names for `x`
-"""
+
+# 
+# Error: Please use column names for `x`
+# 
+
 send_message()
 
 lmElasticNetCaret
@@ -239,9 +245,10 @@ lmElasticNetCaret <- train(formula_enet,
                  #tuneGrid = data.frame(lambda=seq(0.1,1,0.1), alpha=rep(1, 10))
 )
 
-"""
-Error: Please use column names for `x`
-"""
+# 
+# Error: Please use column names for `x`
+# 
+
 ```
 
 
@@ -271,10 +278,10 @@ enet_fit <- train(
   trControl = fit_control
 )
 
-"""
-Error in na.fail.default(list(is_fg = c(2, 1, 1, 1, 1, 2, 2, 1, 2, 2,  : 
-  missing values in object
-"""
+# 
+# Error in na.fail.default(list(is_fg = c(2, 1, 1, 1, 1, 2, 2, 1, 2, 2,  : 
+#   missing values in object
+# 
 
 ```
 
