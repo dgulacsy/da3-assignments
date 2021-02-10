@@ -216,8 +216,6 @@ describe(df$dte_ratio)
 df <- df %>%
   mutate(at_ratio=ifelse(total_assets==0,NA,sales/total_assets))
 
-describe(df$at_ratio)
-
 # Return on Assets ratio: measures how efficiently a company is using its assets to generate profit:
 df <- df %>%
   mutate(roa_ratio=ifelse(total_assets==0,NA,profit/total_assets))
@@ -230,7 +228,6 @@ df <- df %>%
                           ifelse(share_eq>0,profit/share_eq,(-1)*profit/share_eq))) 
 
 describe(df$roe_ratio)
-
 # Creating flags, and winsorizing tails -----------------------------------
 
 # Variables that represent accounting items that cannot be negative (e.g. materials)
@@ -279,14 +276,16 @@ df <- df %>%
            ifelse(is.na(.), mean(., na.rm = TRUE), .),
          ceo_young = as.numeric(ceo_age < 40))
 
-
-
 # create factors
 df <- df %>%
   mutate(urban = factor(urban_m, levels = c(1,2,3)) %>%
            recode(., `1` = 'capital', `2` = "city",`3` = "other"),
          region = factor(region_m, levels = c("Central", "East", "West")),
          ind2_cat = factor(ind2_cat, levels = sort(unique(df$ind2_cat))))
+
+df <- df %>%
+  mutate(is_fg = factor(is_fg, levels = c(0,1)) %>%
+           recode(., `0` = 'no_fast_gowth', `1` = "fast_growth"))
 
 # store comp_id as character
 df$comp_id<-as.character(df$comp_id)
