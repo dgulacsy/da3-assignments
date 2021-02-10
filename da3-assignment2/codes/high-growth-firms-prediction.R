@@ -337,3 +337,9 @@ ggplot(data = df, aes(x=profit, y=as.numeric(is_fg))) +
 m2 <- lm(is_fg~profit,
          data = df)
 summary(m2)
+
+
+
+# export data -------------------------------------------------------------
+
+write_rds(df, "data/clean/bisnode_clean.rds")
