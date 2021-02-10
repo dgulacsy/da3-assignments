@@ -24,13 +24,8 @@ rm(list=ls())
 # General
 library(tidyverse)
 library(Hmisc)
-# Modelling
-
 # Visualization
 library(ggplot2)
-library(stargazer)
-library(xtable)
-library(knitr)
 library(skimr)
 
 source("codes/helper.R")
@@ -210,7 +205,6 @@ df <- df %>%
 describe(df$dta_ratio)
 
 # Debt to Equity ratio: calculates the weight of total debt and financial liabilities against shareholders’ equity
-df$dte_ratio<-df$total_liabs/df$share_eq
 df <- df %>%
   mutate(dte_ratio=ifelse(share_eq==0,total_liabs/1,
                           ifelse(share_eq>0,total_liabs/share_eq,total_liabs/1))) 
@@ -228,18 +222,12 @@ describe(df$at_ratio)
 df <- df %>%
   mutate(roa_ratio=ifelse(total_assets==0,NA,profit/total_assets))
 
-ggplot(data = df, aes(x=roa_ratio, y=as.numeric(is_fg))) +
-  geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue", alpha=0.3) 
-
 describe(df$roa_ratio)
 
 # Return on Equity ratio: measures how efficiently a company is using its equity to generate profit
 df <- df %>%
   mutate(roe_ratio=ifelse(share_eq==0,NA,
                           ifelse(share_eq>0,profit/share_eq,(-1)*profit/share_eq))) 
-  
-ggplot(data = df, aes(x=roe_ratio, y=as.numeric(is_fg))) +
-  geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue", alpha=0.3) 
 
 describe(df$roe_ratio)
 
@@ -317,8 +305,6 @@ financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
 financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
 flags<- colnames(df %>% select(matches("*.flag.")))
-in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
-#financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
 
 # Keep only relevant variables for modeling
 keep<-c(aux,target,business,ceo,sales,financial_basic,financial_ext,financial_basic_ratios,financial_ext_ratios,flags)
@@ -357,4 +343,3 @@ ggplot(data = df, aes(x=profit, y=as.numeric(is_fg))) +
 m2 <- lm(is_fg~profit,
          data = df)
 summary(m2)
-==== BASE ====
