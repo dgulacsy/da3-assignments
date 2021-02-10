@@ -7,9 +7,13 @@
 #
 #########################################################################################
 
+
+# Styling -----------------------------------------------------------------
 # Set Plot Size Dimensions
 mywidth=7.5
 myheight=5.62
+
+theme_set(theme_bw())
 
 # Create Variable Selection Schema File creator function
 vss <- function(df) {
