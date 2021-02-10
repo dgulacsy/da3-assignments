@@ -300,8 +300,6 @@ financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
 financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
 flags<- colnames(df %>% select(matches("*.flag.")))
-in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
-#financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
 
 # Keep only relevant variables for modeling
 keep<-c(aux,target,business,ceo,sales,financial_basic,financial_ext,financial_basic_ratios,financial_ext_ratios,flags)
