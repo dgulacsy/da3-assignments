@@ -296,7 +296,7 @@ write_rds(df, "data/clean/fast-growth-firms-workfile.rds")
 
 target <- c("is_fg")
 business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
-ceo<- c("ceo_inoffice_days","ceo_age","ceo_count",
+ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
         "ceo_female","ceo_foreign","ceo_gender","ceo_origin")
 sales<-c("sales_mil_log","d1_sales_mil_log")
 financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
