@@ -231,3 +231,8 @@ df <- df %>%
   mutate(f_is_fg = factor(is_fg, levels = c(0,1)) %>%
            recode(., `0` = 'no fast growth', `1` = "fast growth"))
 
+
+
+# export final df ---------------------------------------------------------
+
+write_csv(df, "data/clean/bisnode_clean.csv")
