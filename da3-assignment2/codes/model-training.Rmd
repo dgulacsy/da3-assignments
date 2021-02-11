@@ -1,41 +1,68 @@
 ---
-title: "High growth prediction"
-author: "Attila Szuts"
+title: "Finding Fast Growing Firms"
+subtitle: "DA3 Assignment 2"
+author: "Attila Szuts, Dominik Gulacsy"
 date: "2/10/2021"
+code_download: yes
 output: html_document
 editor_options: 
   chunk_output_type: console
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, cache = T)
+```
+
+[Github Repo](https://github.com/dgulacsy/da3-assignments/tree/main/da3-assignment2)
+
 ```{r}
 rm(list = ls())
+# General
 library(tidyverse)
+# Modeling
 library(caret)
+# Parallel Computation
+library(parallel)
+library(doParallel)
+# Visualization
+library(cowplot)
 library(party)
 library(GGally)
 library(pROC)
+library(knitr)
 
 source("codes/helper.R")
+
+
 ```
 
+# Introduction
+In this analytics project we are aiming to find the best model to identify fast growth firms based on their various characteristics and financial indicators. To place this task into a business environment we assumed that the main business motivation behind this whole analytics project is to identify those firms that worth investing in. We did not define a specific form of investment worth considering the recommended firms may be considered for fusion, acquisition or simple buy-in. To find the best a model, first of all we go through all the steps of sample design, label engineering and feature engineering. We also look at some results of our exploratory data analysis to see which particular aspects of the data we should keep in mind and what kind of model specifications we should come up. During our analysis we run altogether 7 probability prediction models and we do classification on 3 of them. We compare and assess their results and recommend a final model for the classification problem.
 
-# Train test split
+# Label engineering
+During 
+
+
+# Data Cleaning/Wrangling
+
+
+
+
+
+# Model preparation
+
+## Train test split
 
 ```{r}
-df <- read_rds("data/clean/bisnode_clean.rds")
+df <- read_rds("data/clean/fast-growth-firms-workfile.rds")
 
-# df$is_fg <- as.factor(df$is_fg)
-# df$f_is_fg <- as.factor(ifelse(df$f_is_fg == "fast growth", "fast_growth", "no_fast_growth"))
+# skim(df)
 
 # create smaller sample to test models
-samp_size <- round(nrow(df) / 5)
-set.seed(1234)
-df <- sample_n(df, samp_size)
-nrow(df)
-df <- df[!is.na(df$is_fg),]
-nrow(df)
-df <- na.omit(df)
-nrow(df)
+# samp_size <- round(nrow(df) / 20)
+# set.seed(1234)
+# df <- sample_n(df, samp_size)
+
 
 set.seed(1234)
 training_ratio <- 0.7
@@ -49,255 +76,423 @@ data_train <- df[train_indices, ]
 data_test <- df[-train_indices, ]
 ```
 
+## Variable selection
+
 ```{r}
-target <- c("is_fg")
-business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
-ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
+# Variable sets
+target <- c("f_is_fg","is_fg")
+business<- c("ind2_cat","urban","region","labor_avg","flag_miss_labor_avg","age","age2","new")
+ceo<- c("ceo_inoffice_years","ceo_age","flag_low_ceo_age","flag_high_ceo_age","flag_miss_ceo_age","ceo_count",
         "ceo_female","ceo_foreign","ceo_gender","ceo_origin")
 sales<-c("sales_mil_log","d1_sales_mil_log")
-financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
+financial_basic <- c("sales_mil","curr_assets","curr_liab","fixed_assets","tang_assets",
                      "intang_assets","inventories","liq_assets","subscribed_cap",
                      "share_eq","material_exp","personnel_exp","amort","profit")
-financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
+financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax","d1_profit")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
-flags<- colnames(df %>% select(matches("*.flag.")))
-in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
-#financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
+financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
 
-formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
-formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + ")))) 
-formula_rf = c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags)
-formula_gbm = vars(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags)
-formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
-formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
+# Interactions
+X1<-paste("ind2_cat",c("urban","region","labor_avg","age","sales_mil_log","d1_sales_mil_log","ceo_age","ceo_female","ceo_foreign"),sep = '*')
+
+formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + "))))
+formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + ")))) 
+formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 ```
 
 # EDA
 ```{r}
-df %>% select(where(is.numeric)) %>% ggcorr(layout.exp = 1)
 
-ggpairs(df, columns = c(target, business))
+# df %>% select(where(is.numeric)) %>% ggcorr(layout.exp = 1)
+# ggpairs(df, columns = c(target, business))
+
+# Check for multicollinearity and perfect collinearity
+numeric_df <- keep( df , is.numeric )
+cT <- cor(numeric_df , use = "complete.obs")
+
+# Check for highly correlated values:
+sum( abs( cT ) >= 0.8 & cT != 1 ) / 2
+# Find the correlations which are higher than 0.8
+id_cr <- which( abs( cT ) >= 0.8 & cT != 1 )
+pair_names <- expand.grid( variable.names(numeric_df) , variable.names(numeric_df) )
+# Get the pairs:
+high_corr <- pair_names[ id_cr , ]
+high_corr <- mutate( high_corr , corr_val = cT[ id_cr ] )
+high_corr <- mutate(high_corr, Var1 = as.character(Var1))
+high_corr <- mutate(high_corr, Var2 = as.character(Var2))
+high_corr$vars<-unlist(lapply(1:nrow(high_corr),function(i){
+  paste(sort(c(high_corr$Var1[i],high_corr$Var2[i])), collapse = "")
+}))
+high_corr<-high_corr[!duplicated(high_corr$vars),] %>% 
+  select(-vars) %>% 
+  arrange(desc(abs(corr_val)))
+
+kable(high_corr)
 ```
 
+# Model building
+```{r, results='hide'}
+# Setup cluster for parallel computing
+# cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
+# registerDoParallel(cluster)
 
-# LPM
+# Initialize lists
+models <- list()
+runtimes <- list()
 
-```{r}
-model_lpm <- lm(formula_lpm, data = data_train)
-# 
-# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-#   contrasts can be applied only to factors with 2 or more levels
-# 
-model_lpm
-```
-
-
-# Logit
-
-```{r}
-model_logit <- glm(formula = formula_log, data = data_train, family = "binomial")
-# 
-# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-#   contrasts can be applied only to factors with 2 or more levels
-# 
-model_logit
-```
-
-
-# Probit
-
-```{r}
-model_probit <- glm(formula = formula_log, data = data_train, family = binomial(link = "probit"))
-# 
-# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-#   contrasts can be applied only to factors with 2 or more levels
-# 
-```
-
-# Random Forest
-
-```{r}
-trctrl <- trainControl(method = "cv", number = 10)
-
-# use all variables?
-model_rf <- train(x = vars(formula_rf),
-                  y = data_train$is_fg,
-                  data = data_train, 
-                  method = "rf",
-                  trControl=trctrl,
-                  num.threads = 7,
-                 na.action = na.omit)
-
-# 
-# Error: Please use column names for `x`
-# 
-
-send_message()
-model_caret
-postResample(data_test$is_fg, predict(model_caret, data_test))
-
-# colnames(data_test, 2)
-```
-
-```{r}
+# Setup CV
 train_control <- trainControl(
   method = "cv",
-  n = 5,
-  classProbs = TRUE, # same as probability = TRUE in ranger
-  # summaryFunction = twoClassSummaryExtended,
-  savePredictions = TRUE
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = TRUE,
+  allowParallel = TRUE,
+  verboseIter = TRUE
 )
-train_control$verboseIter <- TRUE
 
+# LPM ------------------------
+
+set.seed(1234)
+start <- Sys.time()
+model_lpm <- train(
+  formula_lpm,
+  method = "glm",
+  data = data_train,
+  trControl = train_control,
+  na.action = na.omit,
+  metric = "ROC"
+)
+end <- Sys.time()
+
+# Save model props
+models[["lpm"]] <- model_lpm
+runtimes[["lpm"]] <- end-start
+
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**lpm model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
+
+# Logit ------------------------
+
+# Train model with CV
+set.seed(1234)
+start <- Sys.time()
+model_logit <- train(
+    formula_log,
+    method = "glm",
+    data = data_train,
+    family = binomial(link = "logit"),
+    trControl = train_control,
+    na.action = na.omit,
+    metric = "ROC"
+  )
+end <- Sys.time()
+
+# Save model props
+models[["logit"]] <- model_logit
+runtimes[["logit"]] <- end-start
+
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**logit model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
+
+###################################################
+
+# Probit ------------------------
+
+# Train model with CV
+set.seed(1234)
+start <- Sys.time()
+model_probit <- train(
+    formula_log,
+    method = "glm",
+    data = data_train,
+    family = binomial(link = "probit"),
+    trControl = train_control,
+    na.action = na.omit,
+    metric = "ROC"
+  )
+end <- Sys.time()
+
+# Save model props
+models[["probit"]] <- model_probit
+runtimes[["probit"]] <- end-start
+
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**probit model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
+
+###################################################
+
+# ElasticNet ------------------------
+# Set tuning grid
+enet_tune_grid <- expand.grid(
+  "alpha" = seq(0, 1, by = 0.1),
+  "lambda" = seq(0.05, 0.5, by = 0.025)
+)
+
+# Train model with CV
+set.seed(1234)
+start <- Sys.time()
+model_elastic <- train(
+  formula_enet,
+  data = data_train,
+  method = "glmnet",
+  preProcess = c("center", "scale"),
+  tuneGrid = enet_tune_grid,
+  family = "binomial",
+  trControl = train_control,
+  na.action = na.omit
+)
+end <- Sys.time()
+
+# Save model props
+models[["elastic"]] <- model_elastic
+runtimes[["elastic"]] <- end-start
+
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**elastic net model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
+
+###################################################
+
+# RF ------------------------
+# Set tuning grid
 tune_grid <- expand.grid(
   .mtry = c(5, 6, 7),
   .splitrule = "gini",
   .min.node.size = c(10, 15)
 )
 
-# getModelInfo("ranger")
-set.seed(13505)
-rf_model_p <- train(
-  data_train[formula_rf], data_train[["is_fg"]],
-  method = "ranger",
-  data = data_train,
-  tuneGrid = tune_grid,
-  trControl = train_control
-)
+# Train model with CV
+set.seed(1234)
+model_rf <- train(formula_rf,
+                  data = data_train, 
+                  method = "rf",
+                  metric = "ROC",
+                  trControl=train_control,
+                  # tuneGrid =tune_grid,
+                  num.threads = 7,
+                  na.action = na.omit)
+end <- Sys.time()
 
-# 
-# model fit failed for Fold5: mtry=7, splitrule=gini, min.node.size=15 Error in ranger::ranger(dependent.variable.name = ".outcome", data = x,  : 
-#   formal argument "data" matched by multiple actual arguments
-# 
-  
-```
+# Save model props
+models[["rf"]] <- model_elastic
+runtimes[["rf"]] <- end-start
 
-# Boosting
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**random forest model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
-```{r}
-start_time <- Sys.time()
-# Train model with preprocessing & repeated cv
-trctrl <- trainControl(method = "repeatedcv", 
-                       number = 5, 
-                       repeats = 3, 
-                       verboseIter = FALSE)
+###################################################
 
+# GBM ------------------------
+
+
+# Train model with CV
+set.seed(1234)
+start <- Sys.time()
 model_gbm <- train(formula_gbm,
                    data = data_train,
                    method = "gbm",
-                   trControl = trctrl,
+                   trControl = train_control,
                    verbose = 0,
-                   num.threads = 7)
-end_time <- Sys.time()
-model_gbm
+                   # num.threads = 7,
+                   na.action = na.omit)
+end <- Sys.time()
 
-# 
-# Error: Please use column names for `x`
-# 
+# Save model props
+models[["gbm"]] <- model_gbm
+runtimes[["gbm"]] <- end-start
 
-print(end_time - start_time)
-send_message()
-```
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**gbm model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
+###################################################
 
-# KNN
+# KNN ------------------------
 
-```{r}
+# Train model with CV
 set.seed(1234)
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
-
-model_knn <- train(formula_knn, data = data_train, method = "knn",
-                 trControl=trctrl,
-                 preProcess=c("center", "scale"),
-                 tuneLength=20,
-                 num.threads = 7
-                 #tuneGrid = data.frame(k=c(2:8))
-                 )
-model_knn
-
-# 
-# Error: Please use column names for `x`
-# 
-
-send_message()
-
-lmElasticNetCaret
-knnModelRoc <- roc(predictor = predict(model_knn, data_test, type='prob', decision.values=T)$is_fg, response = data_test$is_fg)
-knnModelRoc
-plot(knnModelRoc)
-
-postResample(SpamTest$count, predict(model_knn, SpamTest))
-```
-
-
-# Elastic Net
-```{r}
-set.seed(1234)
-trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary)
-
-lmElasticNetCaret <- train(formula_enet, 
-                 data = data_train, 
-                 method = "glmnet",
-                 trControl=trctrl,
-                 tuneLength=5,
-                 metric='AUC',
-                 num.threads = 7
-                 #tuneGrid = data.frame(lambda=seq(0.1,1,0.1), alpha=rep(1, 10))
-)
-
-# 
-# Error: Please use column names for `x`
-# 
-
-```
-
-
-```{r}
-lasso_tune_grid <- expand.grid(
-  "alpha" = c(1),
-  "lambda" = seq(0.05, 0.5, by = 0.025)
-)
-
-ridge_tune_grid <- expand.grid(
-  "alpha" = c(0),
-  "lambda" = seq(0.05, 0.5, by = 0.025)
-)
-
-enet_tune_grid <- expand.grid(
-  "alpha" = seq(0, 1, by = 0.1),
-  "lambda" = union(lasso_tune_grid[["lambda"]], ridge_tune_grid[["lambda"]])
-)
-
-set.seed(857)
-enet_fit <- train(
-  formula(formula_enet),
+start <- Sys.time()
+model_knn <- train(
+  formula_knn, 
   data = data_train,
-  method = "glmnet",
-  preProcess = c("center", "scale"),
-  tuneGrid = enet_tune_grid,
-  trControl = fit_control
-)
+  method = "knn",
+  trControl=train_control,
+  preProcess=c("center", "scale"),
+  tuneLength=20,
+  # num.threads = 7,
+  na.action = na.omit
+  #tuneGrid = data.frame(k=c(2:8))
+                 )
+end <- Sys.time()
 
-# 
-# Error in na.fail.default(list(is_fg = c(2, 1, 1, 1, 1, 2, 2, 1, 2, 2,  : 
-#   missing values in object
-# 
+# Save model props
+models[["knn"]] <- model_knn
+runtimes[["knn"]] <- end-start
 
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**knn model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
+
+# Release cores from parallel computing
+stopCluster(cluster)
 ```
 
 
+
+
 ```{r}
-lmElasticNetCaret
-lmElasticNetCaretRoc <- roc(predictor = predict(lmElasticNetCaret, data_test, type='prob', decision.values=T), response = data_test$f_is_fg)
-lmElasticNetCaretRoc
-plot(lmElasticNetCaretRoc)
+# Create calibration curves ----------------------
+data_test$gbm_no_loss_pred <- predict(model_gbm, newdata = data_test, type = "prob")$fast_growth
+data_test$rf_no_loss_pred <- predict(model_rf, newdata = data_test, type = "prob")$fast_growth
+data_test$logit_no_loss_pred <- predict(model_logit, newdata = data_test, type = "prob")$fast_growth
 
-confusionMatrix(data_test$f_is_fg, predict(lmElasticNetCaret, data_test, decision.values=T))
+calib_gbm<-create_calibration_plot(data_test, 
+  file_name = "best-model-calibration", 
+  prob_var = "gbm_no_loss_pred", 
+  actual_var = "is_fg",
+  n_bins = 10)
 
-plot(lmElasticNetCaret)
+calib_rf<-create_calibration_plot(data_test, 
+  file_name = "best-model-calibration", 
+  prob_var = "rf_no_loss_pred", 
+  actual_var = "is_fg",
+  n_bins = 10)
 
-coef(lmElasticNetCaret$finalModel, lmElasticNetCaret$bestTune$lambda)
-postResample(data_test$f_is_fg, predict(lmElasticNetCaret, data_test))
+calib_curves<-plot_grid(calib_gbm$plot+labs(subtitle = "GBM (No loss function)"),calib_rf$plot+labs(subtitle = "Random Forest (No loss function)"), nrow = 1,ncol=2)
+calib_curves
 
+kable(calib1$bins)
+```
+
+# Choose Top 3 Probability Prediction Models based on AUC
+```{r}
+
+# Calculate mean CV AUCs and choose top 3 models to use for classification
+cv_aucs<-sort(unlist(lapply(models, function(model){
+  mean(model$resample$ROC)
+})),decreasing = T)
+top_n<-3
+
+top_models<-models[names(cv_aucs[1:top_n])]
+
+```
+
+# Run classification with loss function
+
+```{r}
+########################################
+# Classification with a loss function
+########################################
+
+
+
+# relative cost of of a false negative classification (as compared with a false positive classification)
+# it costs 3 times more to falsely identify a company as fast growing than falsely identifying to be not fast growing. Intuition that investing in a not fast growing company costs more than missing investment opportunities of fast growing firms.
+FP=1.2
+FN=1
+cost = FN/FP
+# the prevalence, or the proportion of cases in the population (n.cases/(n.controls+n.cases))
+prevelance = sum(data_train$is_fg)/length(data_train$is_fg)
+
+# Display Table
+cost_matrix<-data.frame(status=c("no_fast_growth","fast_growth"),no_fast_growth=c(0,FP),fast_growth=c(FN,0))
+kable(cost_matrix)
+
+# All models at once -------
+# Draw ROC Curve and find optimal threshold with loss function
+best_tresholds <- list()
+expected_loss <- list()
+models_cv_rocs <- list()
+models_cv_threshold <- list()
+models_cv_expected_loss <- list()
+
+for (model_name in names(top_models)) {
+  print(model_name)
+  model <- top_models[[model_name]]
+  colname <- paste0(model_name,"_prediction")
+  
+  best_tresholds_cv <- list()
+  expected_loss_cv <- list()
+
+  for (fold in c("Fold01", "Fold02", "Fold03", "Fold04", "Fold05","Fold06","Fold07","Fold08","Fold09","Fold10")) {
+    cv_fold <-
+      model$pred %>%
+      filter(Resample == fold)
+
+    roc_obj <- roc(cv_fold$obs, cv_fold$fast_growth)
+    best_treshold <- coords(roc_obj, "best", ret="all", transpose = FALSE,
+                            best.method="youden", best.weights=c(cost, prevelance))
+    best_tresholds_cv[[fold]] <- best_treshold$threshold
+    expected_loss_cv[[fold]] <- (best_treshold$fp*FP + best_treshold$fn*FN)/length(cv_fold$fast_growth)
+    # Create plots - this is for Fold10
+    if (fold =="Fold10"){
+      p1<-createLossPlot(roc_obj, best_treshold, "rf_p_loss_plot")
+      p2<-createRocPlotWithOptimal(roc_obj, best_treshold, "rf_p_roc_plot")
+      threshold_plots<-plot_grid(p1, p2, nrow=1, ncol=2)
+      print(threshold_plots)
+    }
+    }
+
+  # average
+  best_tresholds[[model_name]] <- mean(unlist(best_tresholds_cv))
+  expected_loss[[model_name]] <- mean(unlist(expected_loss_cv))
+
+  # for fold #5
+  models_cv_rocs[[model_name]] <- roc_obj
+  models_cv_threshold[[model_name]] <- best_treshold
+  models_cv_expected_loss[[model_name]] <- expected_loss_cv[[fold]]
+
+}
+
+models_summary <- data.frame(
+  "CV AUC" = cv_aucs[1:top_n],
+  "Avg of optimal thresholds" = unlist(best_tresholds),
+  "Threshold for Fold5" = sapply(models_cv_threshold, function(x) {x$threshold}),
+  "Avg expected loss" = unlist(expected_loss),
+  "Expected loss for Fold5" = unlist(models_cv_expected_loss))
+
+
+
+# Choose GBM
+kable(models_summary)
+
+```
+
+# Test model performance
+
+```{r}
+# Take model to test and estimate RMSE, AUC and expected loss ------------------------------------
+data_test<-na.omit(data_test)
+
+gbm_predicted_probabilities_test <- predict(model_gbm, newdata = data_test, type = "prob")
+data_test$gbm_p_prediction <- gbm_predicted_probabilities_test$fast_growth
+RMSE(data_test$gbm_p_prediction, data_test$is_fg)
+
+# ROC curve on holdout
+roc_obj_test <- roc(data_test$is_fg, data_test[, "gbm_p_prediction", drop=TRUE])
+
+# AUC
+as.numeric(roc_obj_test$auc)
+
+# Get expected loss on test set with optimal threshold
+test_treshold <- coords(roc_obj_test, x = best_tresholds[["rf_p"]] , input= "threshold",
+                           ret="all", transpose = FALSE)
+expected_loss_test <- (test_treshold$fp*FP + test_treshold$fn*FN)/length(data_test$is_fg)
+expected_loss_test
 ```
 
