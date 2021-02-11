@@ -138,6 +138,7 @@ send_message <- function(webhookurl = url, my_text = text) {
   )
 }
 
+
 # read in credentials
 creds <- read.delim('/mnt/DATA/Projects/BA-20-21/danalysis-3/data/creds.txt', sep = ',') # change the path to your creds.txt file
 url <- as.character(creds[creds$key == 'webhookurl', 2])
