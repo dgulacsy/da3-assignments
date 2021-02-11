@@ -22,10 +22,12 @@ source("codes/helper.R")
 # Train test split
 
 ```{r}
-df <- read_rds("data/clean/bisnode_clean.rds")
+df <- read_rds("data/clean/fast-growth-firms-workfile.rds")
 
 # df$is_fg <- as.factor(df$is_fg)
 # df$f_is_fg <- as.factor(ifelse(df$f_is_fg == "fast growth", "fast_growth", "no_fast_growth"))
+
+skim(df)
 
 # create smaller sample to test models
 samp_size <- round(nrow(df) / 20)
@@ -34,7 +36,7 @@ df <- sample_n(df, samp_size)
 nrow(df)
 df <- df[!is.na(df$is_fg),]
 nrow(df)
-df <- na.omit(df)
+# df <- na.omit(df)
 nrow(df)
 
 set.seed(1234)
@@ -51,7 +53,6 @@ data_test <- df[-train_indices, ]
 
 ```{r}
 target <- c("is_fg")
-target_f <- c("f_is_fg")
 business<- c("ind2_cat","labor_avg","age","age2","new") # "urban","region"
 ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
         "ceo_female","ceo_foreign","ceo_gender") # ceo_origin
@@ -69,8 +70,8 @@ formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, f
 formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + ")))) 
 formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
 formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_knn = formula(paste0(target_f, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_enet = formula(paste0(target_f, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
+formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
+formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic, flags),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
 ```
 
 # EDA
@@ -78,6 +79,111 @@ formula_enet = formula(paste0(target_f, paste0(" ~ ",paste(c(business, ceo,sales
 df %>% select(where(is.numeric)) %>% ggcorr(layout.exp = 1)
 
 ggpairs(df, columns = c(target, business))
+```
+
+
+```{r}
+
+# 5 fold cross-validation
+train_control <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummaryExtended,
+  savePredictions = TRUE
+)
+
+
+# Train Logit Models ----------------------------------------------
+
+logit_model_vars <- list("X1" = X1, "X2" = X2, "X3" = X3, "X4" = X4, "X5" = X5)
+
+CV_RMSE_folds <- list()
+logit_models <- list()
+
+for (model_name in names(logit_model_vars)) {
+
+  features <- logit_model_vars[[model_name]]
+
+  set.seed(13505)
+  glm_model <- train(
+    formula(paste0("default_f ~", paste0(features, collapse = " + "))),
+    method = "glm",
+    data = data_train,
+    family = binomial,
+    trControl = train_control
+  )
+
+  logit_models[[model_name]] <- glm_model
+  # Calculate RMSE on test for each fold
+  CV_RMSE_folds[[model_name]] <- glm_model$resample[,c("Resample", "RMSE")]
+
+}
+
+# Logit lasso -----------------------------------------------------------
+
+lambda <- 10^seq(-1, -4, length = 10)
+grid <- expand.grid("alpha" = 1, lambda = lambda)
+
+set.seed(13505)
+system.time({
+  logit_lasso_model <- train(
+    formula(paste0("default_f ~", paste0(logitvars, collapse = " + "))),
+    data = data_train,
+    method = "glmnet",
+    preProcess = c("center", "scale"),
+    family = "binomial",
+    trControl = train_control,
+    tuneGrid = grid,
+    na.action=na.exclude
+  )
+})
+
+tuned_logit_lasso_model <- logit_lasso_model$finalModel
+best_lambda <- logit_lasso_model$bestTune$lambda
+logit_models[["LASSO"]] <- logit_lasso_model
+lasso_coeffs <- as.matrix(coef(tuned_logit_lasso_model, best_lambda))
+write.csv(lasso_coeffs, paste0(output, "lasso_logit_coeffs.csv"))
+
+CV_RMSE_folds[["LASSO"]] <- logit_lasso_model$resample[,c("Resample", "RMSE")]
+
+
+#############################################x
+# PART I
+# No loss fn
+########################################
+
+# Draw ROC Curve and calculate AUC for each folds --------------------------------
+CV_AUC_folds <- list()
+
+for (model_name in names(logit_models)) {
+
+  auc <- list()
+  model <- logit_models[[model_name]]
+  for (fold in c("Fold1", "Fold2", "Fold3", "Fold4", "Fold5")) {
+    cv_fold <-
+      model$pred %>%
+      filter(Resample == fold)
+
+    roc_obj <- roc(cv_fold$obs, cv_fold$default)
+    auc[[fold]] <- as.numeric(roc_obj$auc)
+  }
+
+  CV_AUC_folds[[model_name]] <- data.frame("Resample" = names(auc),
+                                              "AUC" = unlist(auc))
+}
+
+# For each model: average RMSE and average AUC for models ----------------------------------
+
+nonCV_RMSE <- list()
+CV_AUC <- list()
+
+for (model_name in names(logit_models)) {
+  CV_RMSE[[model_name]] <- mean(CV_RMSE_folds[[model_name]]$RMSE)
+  CV_AUC[[model_name]] <- mean(CV_AUC_folds[[model_name]]$AUC)
+}
+
+
 ```
 
 
@@ -94,8 +200,9 @@ model_lpm
 ```{r}
 model_logit <- glm(formula = formula_log, data = data_train, family = "binomial")
 #
-# Warning message:
-# glm.fit: fitted probabilities numerically 0 or 1 occurred
+# Warning messages:
+# 1: glm.fit: algorithm did not converge 
+# 2: glm.fit: fitted probabilities numerically 0 or 1 occurred
 #
 model_logit
 ```
@@ -115,7 +222,7 @@ model_probit
 # Random Forest
 
 ```{r}
-trctrl <- trainControl(method = "cv", number = 3)
+trctrl <- trainControl(method = "cv", number = 3, classProbs = TRUE, summaryFunction = twoClassSummary)
 trctrl$verboseIter <- TRUE
 
 start <- Sys.time()
@@ -123,6 +230,7 @@ start <- Sys.time()
 model_rf <- train(formula_rf,
                   data = data_train, 
                   method = "rf",
+                  metric = "ROC",
                   trControl=trctrl,
                   num.threads = 7,
                  na.action = na.omit)
@@ -162,7 +270,7 @@ start_time <- Sys.time()
 trctrl <- trainControl(method = "repeatedcv", 
                        number = 3, 
                        repeats = 1, 
-                       verboseIter = TRUE)
+                       verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
 
 model_gbm <- train(formula_gbm,
                    data = data_train,
@@ -183,7 +291,7 @@ send_message()
 
 ```{r}
 set.seed(1234)
-trctrl <- trainControl(method = "repeatedcv", number = 3, repeats = 1, verboseIter = TRUE)
+trctrl <- trainControl(method = "repeatedcv", number = 3, repeats = 1, verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
 
 
 model_knn <- train(formula_knn, data = data_train, method = "knn",
@@ -216,24 +324,34 @@ postResample(SpamTest$count, predict(model_knn, SpamTest))
 # Elastic Net
 ```{r}
 set.seed(1234)
-trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary, verboseIter = TRUE, number = 3)
+trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary, verboseIter = TRUE, number = 3, classProbs = TRUE, summaryFunction = twoClassSummary)
 
 lmElasticNetCaret <- train(formula_enet, 
                  data = data_train, 
                  method = "glmnet",
                  trControl=trctrl,
                  tuneLength=5,
-                 metric='AUC',
+                 metric='ROC',
+                 family = "binomial",
                  # num.threads = 7,
                  na.action = na.omit
                  #tuneGrid = data.frame(lambda=seq(0.1,1,0.1), alpha=rep(1, 10))
 )
 
-# 
-# Warning message:
-# In train.default(x, y, weights = w, ...) :
-#  The metric "AUC" was not in the result set. ROC will be used instead.
-# 
+
+
+lmElasticNetCaret
+lmElasticNetCaretRoc <- roc(predictor = predict(lmElasticNetCaret, data_test, type='prob', decision.values=T), response = data_test$f_is_fg)
+lmElasticNetCaretRoc
+plot(lmElasticNetCaretRoc)
+
+confusionMatrix(data_test$is_fg, predict(lmElasticNetCaret, data_test, decision.values=T))
+
+plot(lmElasticNetCaret)
+
+coef(lmElasticNetCaret$finalModel, lmElasticNetCaret$bestTune$lambda)
+postResample(data_test$is_fg, predict(lmElasticNetCaret, data_test))
+
 
 ```
 
@@ -251,42 +369,26 @@ ridge_tune_grid <- expand.grid(
 
 enet_tune_grid <- expand.grid(
   "alpha" = seq(0, 1, by = 0.1),
-  "lambda" = union(lasso_tune_grid[["lambda"]], ridge_tune_grid[["lambda"]]),
-  verboseIter = TRUE,
-  method = "cv",
-  number = 3
+  "lambda" = union(lasso_tune_grid[["lambda"]], ridge_tune_grid[["lambda"]])
 )
 
-set.seed(857)
+fit_control <- trainControl(method = "cv", 
+                            number = 3,
+                            verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
+                            
+
+set.seed(1234)
 enet_fit <- train(
   formula_enet,
   data = data_train,
   method = "glmnet",
   preProcess = c("center", "scale"),
   tuneGrid = enet_tune_grid,
-  trControl = fit_control
+  family = "binomial",
+  trControl = fit_control,
+  na.action = na.omit
 )
 
-# 
-# Error in na.fail.default(list(is_fg = c(2, 1, 1, 1, 1, 2, 2, 1, 2, 2,  : 
-#   missing values in object
-# 
 
+enet_fit
 ```
-
-
-```{r}
-lmElasticNetCaret
-lmElasticNetCaretRoc <- roc(predictor = predict(lmElasticNetCaret, data_test, type='prob', decision.values=T), response = data_test$f_is_fg)
-lmElasticNetCaretRoc
-plot(lmElasticNetCaretRoc)
-
-confusionMatrix(data_test$f_is_fg, predict(lmElasticNetCaret, data_test, decision.values=T))
-
-plot(lmElasticNetCaret)
-
-coef(lmElasticNetCaret$finalModel, lmElasticNetCaret$bestTune$lambda)
-postResample(data_test$f_is_fg, predict(lmElasticNetCaret, data_test))
-
-```
-
