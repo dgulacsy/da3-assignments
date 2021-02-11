@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
 
 ## [Github Repo](https://github.com/dgulacsy/da3-assignments/tree/main/da3-assignment2)
 
-```{r}
+```{r load_libraries, include=FALSE}
 rm(list = ls())
 # General
 library(tidyverse)
@@ -55,7 +55,7 @@ We are going to build two logistic regression models (one using logit the other 
 
 ## Train test split
 
-```{r}
+```{r train_test_split, include=F}
 df <- read_rds("data/clean/fast-growth-firms-workfile.rds")
 
 # skim(df)
@@ -80,7 +80,7 @@ data_test <- df[-train_indices, ]
 
 ## Variable selection
 
-```{r}
+```{r var_select, include=F}
 # Variable sets
 target <- c("f_is_fg","is_fg")
 business<- c("ind2_cat","urban","region","labor_avg","flag_miss_labor_avg","age","age2","new")
@@ -106,7 +106,7 @@ formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financ
 ```
 
 # EDA
-```{r}
+```{r eda, include=F}
 
 # df %>% select(where(is.numeric)) %>% ggcorr(layout.exp = 1)
 # ggpairs(df, columns = c(target, business))
@@ -135,7 +135,7 @@ high_corr<-high_corr[!duplicated(high_corr$vars),] %>%
 ```
 
 # Refactored modelling
-```{r}
+```{r modeling, cache=TRUE, include=F}
 # Setup cluster for parallel computing
 # cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
 # registerDoParallel(cluster)
@@ -331,7 +331,7 @@ send_message(my_text = paste0(user, ", your ", modelname, " has finished trainin
 
 # Choose Top 3 Probability Prediction Models based on AUC
 
-```{r}
+```{r top3_models, include=F}
 # Calculate mean CV AUCs and choose top 3 models to use for classification
 cv_aucs<-sort(unlist(lapply(models, function(model){
   mean(model$resample$ROC)
@@ -360,7 +360,7 @@ rocs_det
 
 # Run classification with loss function
 
-```{r}
+```{r calssification, include=F}
 ########################################
 # Classification with a loss function
 ########################################
@@ -443,7 +443,7 @@ kable(models_summary)
 
 # Test model performance
 
-```{r}
+```{r test_performance, include=F}
 # Take model to test and estimate RMSE, AUC and expected loss ------------------------------------
 data_test<-na.omit(data_test)
 
