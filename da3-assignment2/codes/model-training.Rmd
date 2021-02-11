@@ -27,6 +27,10 @@ source("codes/helper.R")
 ```
 
 # Introduction
+In this analytics project we are aiming to find the best model to predict fast growth firms based on their various characteristics and financial indicators. To place this task into a business environment we assumed that the main business motivation behind this whole analytics project is to identify those firms that worth investing in. We did not define a specific form of investment worth considering the predicted firms may be considered for fusion, acquisition or simple buy-in. To find the best a model, first of all we go through all the steps of sample design, label engineering and feature engineering. We also look at some results of our exploratory data analysis to see which particular aspects of the data we should keep in mind and what kind of model specifications we should come up. During our analysis we run altogether 7 models increasing complexity and finally a model using LASSO. I compare and assess model performance and recommend a final model for the prediction problem.
+
+
+# Label engineering
 
 
 
