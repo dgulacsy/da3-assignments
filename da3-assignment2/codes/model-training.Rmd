@@ -17,14 +17,22 @@ knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
 
 ```{r}
 rm(list = ls())
+# General
 library(tidyverse)
+# Modeling
 library(caret)
+# Parallel Computation
+library(parallel)
+library(doParallel)
+# Visualization
 library(party)
 library(GGally)
 library(pROC)
 library(knitr)
 
 source("codes/helper.R")
+
+
 ```
 
 # Introduction
@@ -128,7 +136,7 @@ high_corr<-high_corr[!duplicated(high_corr$vars),] %>%
 
 ```{r}
 results <- list()
-```
+
 
 train_control <- trainControl(
   method = "cv",
@@ -369,23 +377,217 @@ modelname <- "elastic net model"
 send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 ```
 
-# Choose Top 3 Probability Prediction Models based on AUC
 ```{r}
 
 confusionMatrix(data_test$is_fg, predict(enet_fit, data_test, decision.values=T))
 
 plot(enet_fit)
 
-
-
-#top3_models<-
 ```
 
+# Recode modelling
+```{r}
+# Setup cluster for parallel computing
+cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
+registerDoParallel(cluster)
+
+# Initialize lists
+models <- list()
+runtimes <- list()
+
+# Setup CV
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = TRUE,
+  allowParallel = TRUE,
+  verboseIter = TRUE
+)
+
+# Logit ------------------------
+
+# Train model with CV
+set.seed(1234)
+start <- Sys.time()
+model_logit <- train(
+    formula_log,
+    method = "glm",
+    data = data_train,
+    family = binomial,
+    trControl = train_control,
+    na.action = na.omit,
+    metric = "ROC"
+  )
+end <- Sys.time()
+
+# Save model props
+models[["logit"]] <- model_logit
+runtimes[["logit"]] <- end-start
+
+# Notification
+modelname <- "logit model"
+send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
+
+###################################################
+
+# Probit ------------------------
+
+# Train model with CV
+set.seed(1234)
+start <- Sys.time()
+model_probit <- train(
+    formula_log,
+    method = "glm",
+    data = data_train,
+    family = binomial(link = "probit"),
+    trControl = train_control,
+    na.action = na.omit,
+    metric = "ROC"
+  )
+end <- Sys.time()
+
+# Save model props
+models[["probit"]] <- model_logit
+runtimes[["probit"]] <- end-start
+
+# Notification
+modelname <- "probit model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+
+###################################################
+
+# ElasticNet ------------------------
+# Set tuning grid
+enet_tune_grid <- expand.grid(
+  "alpha" = seq(0, 1, by = 0.1),
+  "lambda" = seq(0.05, 0.5, by = 0.025)
+)
+
+# Train model with CV
+set.seed(1234)
+start <- Sys.time()
+model_elastic <- train(
+  formula_enet,
+  data = data_train,
+  method = "glmnet",
+  preProcess = c("center", "scale"),
+  tuneGrid = enet_tune_grid,
+  family = "binomial",
+  trControl = fit_control,
+  na.action = na.omit
+)
+end <- Sys.time()
+
+# Save model props
+models[["elastic"]] <- model_elastic
+runtimes[["elastic"]] <- end-start
+
+# Notification
+modelname <- "elastic net model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+
+###################################################
+
+# RF ------------------------
+# Set tuning grid
+tune_grid <- expand.grid(
+  .mtry = c(5, 6, 7),
+  .splitrule = "gini",
+  .min.node.size = c(10, 15)
+)
+
+# Train model with CV
+set.seed(1234)
+model_rf <- train(formula_rf,
+                  data = data_train, 
+                  method = "rf",
+                  metric = "ROC",
+                  trControl=trctrl,
+                  # tuneGrid =tune_grid,
+                  num.threads = 7,
+                  na.action = na.omit)
+end <- Sys.time()
+
+# Save model props
+models[["rf"]] <- model_elastic
+runtimes[["rf"]] <- end-start
+
+# Notification
+modelname <- "random forest model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+
+###################################################
+
+# GBM ------------------------
+
+
+# Train model with CV
+set.seed(1234)
+model_gbm <- train(formula_gbm,
+                   data = data_train,
+                   method = "gbm",
+                   trControl = trctrl,
+                   verbose = 0,
+                   # num.threads = 7,
+                   na.action = na.omit)
+end_time <- Sys.time()
+
+# Save model props
+models[["gbm"]] <- model_gbm
+runtimes[["gbm"]] <- end-start
+
+# Notification
+modelname <- "gbm model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+
+###################################################
+
+# KNN ------------------------
+
+# Train model with CV
+set.seed(1234)
+start <- Sys.time()
+model_knn <- train(
+  formula_knn, 
+  data = data_train, 
+  method = "knn",
+  trControl=trctrl,
+  preProcess=c("center", "scale"),
+  tuneLength=20,
+  # num.threads = 7,
+  na.action = na.omit
+  #tuneGrid = data.frame(k=c(2:8))
+                 )
+end <- Sys.time()
+
+# Save model props
+models[["knn"]] <- model_knn
+runtimes[["knn"]] <- end-start
+
+# Notification
+modelname <- "knn model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+
+# Release cores from parallel computing
+stopCluster(cluster)
+```
+
+
+
+
+
+# Choose Top 3 Probability Prediction Models based on AUC
+```{r}
+#top3_models<-
+
+```
 
 # Run classification with loss function
 
 ```{r}
-#############################################x
+########################################
 # Classification with a loss function
 ########################################
 
@@ -445,6 +647,7 @@ logit_summary2 <- data.frame("Avg of optimal thresholds" = unlist(best_tresholds
                              "Threshold for Fold5" = sapply(logit_cv_threshold, function(x) {x$threshold}),
                              "Avg expected loss" = unlist(expected_loss),
                              "Expected loss for Fold5" = unlist(logit_cv_expected_loss))
+
 
 
 ```
