@@ -1,5 +1,5 @@
 ---
-title: "Finding fast growing firms"
+title: "Finding Fast Growing Firms"
 subtitle: "DA3 Assignment 2"
 author: "Attila Szuts, Dominik Gulacsy"
 date: "2/10/2021"
@@ -10,10 +10,10 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, cache = T)
 ```
 
-## [Github Repo](https://github.com/dgulacsy/da3-assignments/tree/main/da3-assignment2)
+[Github Repo](https://github.com/dgulacsy/da3-assignments/tree/main/da3-assignment2)
 
 ```{r}
 rm(list = ls())
@@ -129,10 +129,11 @@ high_corr<-high_corr[!duplicated(high_corr$vars),] %>%
   select(-vars) %>% 
   arrange(desc(abs(corr_val)))
 
+kable(high_corr)
 ```
 
-# Refactored modelling
-```{r}
+# Model building
+```{r, results='hide'}
 # Setup cluster for parallel computing
 cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
 registerDoParallel(cluster)
@@ -172,9 +173,9 @@ end <- Sys.time()
 models[["logit"]] <- model_logit
 runtimes[["logit"]] <- end-start
 
-# Notification
-modelname <- "logit model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
+# # Notification
+# modelname <- "logit model"
+# send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
 
 ###################################################
 
@@ -198,9 +199,9 @@ end <- Sys.time()
 models[["probit"]] <- model_logit
 runtimes[["probit"]] <- end-start
 
-# Notification
-modelname <- "probit model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# # Notification
+# modelname <- "probit model"
+# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 
 ###################################################
 
@@ -230,9 +231,9 @@ end <- Sys.time()
 models[["elastic"]] <- model_elastic
 runtimes[["elastic"]] <- end-start
 
-# Notification
-modelname <- "elastic net model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# # Notification
+# modelname <- "elastic net model"
+# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 
 ###################################################
 
@@ -260,9 +261,9 @@ end <- Sys.time()
 models[["rf"]] <- model_rf
 runtimes[["rf"]] <- end-start
 
-# Notification
-modelname <- "random forest model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# # Notification
+# modelname <- "random forest model"
+# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 
 ###################################################
 
@@ -283,9 +284,9 @@ end_time <- Sys.time()
 models[["gbm"]] <- model_gbm
 runtimes[["gbm"]] <- end-start
 
-# Notification
-modelname <- "gbm model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# # Notification
+# modelname <- "gbm model"
+# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 
 ###################################################
 
@@ -311,14 +312,39 @@ end <- Sys.time()
 models[["knn"]] <- model_knn
 runtimes[["knn"]] <- end-start
 
-# Notification
-modelname <- "knn model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# # Notification
+# modelname <- "knn model"
+# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 
 # Release cores from parallel computing
 stopCluster(cluster)
 ```
 
+
+```{r}
+
+# Create calibration curves ----------------------
+data_test$gbm_no_loss_pred <- predict(model_gbm, newdata = data_test, type = "prob")$fast_growth
+data_test$rf_no_loss_pred <- predict(model_rf, newdata = data_test, type = "prob")$fast_growth
+data_test$logit_no_loss_pred <- predict(model_logit, newdata = data_test, type = "prob")$fast_growth
+
+calib_gbm<-create_calibration_plot(data_test, 
+  file_name = "best-model-calibration", 
+  prob_var = "gbm_no_loss_pred", 
+  actual_var = "is_fg",
+  n_bins = 10)
+
+calib_rf<-create_calibration_plot(data_test, 
+  file_name = "best-model-calibration", 
+  prob_var = "rf_no_loss_pred", 
+  actual_var = "is_fg",
+  n_bins = 10)
+
+calib_curves<-plot_grid(calib_gbm$plot+labs(subtitle = "GBM (No loss function)"),calib_rf$plot+labs(subtitle = "Random Forest (No loss function)"), nrow = 1,ncol=2)
+calib_curves
+
+kable(calib1$bins)
+```
 
 # Choose Top 3 Probability Prediction Models based on AUC
 ```{r}
@@ -340,11 +366,6 @@ top_models<-models[names(cv_aucs[1:top_n])]
 # Classification with a loss function
 ########################################
 
-# Introduce loss function
-cost_matrix<-data.frame(status=c("no_fast_growth","fast_growth"),no_fast_growth=c(0,3),fast_growth=c(1,0))
-
-kable(cost_matrix)
-
 # relative cost of of a false negative classification (as compared with a false positive classification)
 # it costs 3 times more to falsely identify a company as fast growing than falsely identifying to be not fast growing. Intuition that investing in a not fast growing company costs more than missing investment opportunities of fast growing firms.
 FP=1.2
@@ -353,8 +374,9 @@ cost = FN/FP
 # the prevalence, or the proportion of cases in the population (n.cases/(n.controls+n.cases))
 prevelance = sum(data_train$is_fg)/length(data_train$is_fg)
 
-# One by one
-
+# Display Table
+cost_matrix<-data.frame(status=c("no_fast_growth","fast_growth"),no_fast_growth=c(0,FP),fast_growth=c(FN,0))
+kable(cost_matrix)
 
 # All models at once -------
 # Draw ROC Curve and find optimal threshold with loss function
@@ -437,7 +459,5 @@ test_treshold <- coords(roc_obj_test, x = best_tresholds[["rf_p"]] , input= "thr
                            ret="all", transpose = FALSE)
 expected_loss_test <- (test_treshold$fp*FP + test_treshold$fn*FN)/length(data_test$is_fg)
 expected_loss_test
-describe(expected_loss_test)
-
 ```
 
