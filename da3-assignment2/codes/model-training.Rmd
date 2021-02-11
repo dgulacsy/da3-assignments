@@ -354,8 +354,23 @@ send_message(my_text = paste0(user, ", your ", modelname, " has finished trainin
 
 # Choose Top 3 Probability Prediction Models based on AUC
 ```{r}
-#top3_models<-
+# Get the average ROC across 10 fold CV for each model.
+rocs <- list()
+for (model in 1:length(models)) {
+  modelname <- names(models)[model]
+  rocs[modelname] <- mean(models[[model]]$resample$ROC)
+}
+rocs
 
+# Detailed ROC values for each model
+rocs_det <- list()
+for (model in 1:length(models)) {
+  modelname <- names(models)[model]
+  rocs_det[modelname] <- list(models[[model]]$resample$ROC)
+}
+rocs_det
+
+top3_models<- list(models$gbm, models$logit)
 ```
 
 # Run classification with loss function
