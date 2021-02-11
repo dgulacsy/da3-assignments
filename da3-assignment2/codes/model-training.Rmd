@@ -39,6 +39,7 @@ During
 
 
 
+
 # Model preparation
 
 ## Train test split
@@ -49,14 +50,10 @@ df <- read_rds("data/clean/fast-growth-firms-workfile.rds")
 # skim(df)
 
 # create smaller sample to test models
-samp_size <- round(nrow(df) / 20)
-set.seed(1234)
-df <- sample_n(df, samp_size)
-nrow(df)
-df <- df[!is.na(df$is_fg),]
-nrow(df)
-df <- na.omit(df)
-nrow(df)
+# samp_size <- round(nrow(df) / 20)
+# set.seed(1234)
+# df <- sample_n(df, samp_size)
+
 
 set.seed(1234)
 training_ratio <- 0.7
@@ -85,6 +82,7 @@ financial_basic <- c("sales_mil","curr_assets","curr_liab","fixed_assets","tang_
 financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax","d1_profit")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
 financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
+flags <- colnames(df %>% select(matches("*.flag.")))
 
 # Interactions
 X1<-paste("ind2_cat",c("urban","region","labor_avg","age","sales_mil_log","d1_sales_mil_log","ceo_age","ceo_female","ceo_foreign"),sep = '*')
@@ -129,152 +127,112 @@ high_corr<-high_corr[!duplicated(high_corr$vars),] %>%
 # Modelling
 
 ```{r}
-### In progress -----------------
+results <- list()
+```
 
-# 5 fold cross-validation
 train_control <- trainControl(
   method = "cv",
-  number = 5,
+  number = 10,
   classProbs = TRUE,
-  summaryFunction = twoClassSummaryExtended,
+  summaryFunction = twoClassSummary,
   savePredictions = TRUE
 )
 
+start <- Sys.time()
+model_lpm <- train(
+    formula_log,
+    method = "glm",
+    data = data_train,
+    trControl = train_control,
+    na.action = na.omit,
+    metric = "ROC"
+  )
+end <- Sys.time()
+modelname <- "lpm model"
+send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
 
-# Train Logit Models ----------------------------------------------
+results[["roc_lpm"]] <- mean(model_lpm$resample$ROC)
+```
 
-logit_model_vars <- list("X1" = X1, "X2" = X2, "X3" = X3, "X4" = X4, "X5" = X5)
 
-CV_RMSE_folds <- list()
-logit_models <- list()
+## Logit
 
-for (model_name in names(logit_model_vars)) {
+```{r}
+set.seed(1234)
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = TRUE
+)
 
-  features <- logit_model_vars[[model_name]]
-
-  set.seed(13505)
-  glm_model <- train(
-    formula(paste0("default_f ~", paste0(features, collapse = " + "))),
+start <- Sys.time()
+model_logit <- train(
+    formula_log,
     method = "glm",
     data = data_train,
     family = binomial,
-    trControl = train_control
-  )
-
-  logit_models[[model_name]] <- glm_model
-  # Calculate RMSE on test for each fold
-  CV_RMSE_folds[[model_name]] <- glm_model$resample[,c("Resample", "RMSE")]
-
-}
-
-# Logit lasso -----------------------------------------------------------
-
-lambda <- 10^seq(-1, -4, length = 10)
-grid <- expand.grid("alpha" = 1, lambda = lambda)
-
-set.seed(13505)
-system.time({
-  logit_lasso_model <- train(
-    formula(paste0("default_f ~", paste0(logitvars, collapse = " + "))),
-    data = data_train,
-    method = "glmnet",
-    preProcess = c("center", "scale"),
-    family = "binomial",
     trControl = train_control,
-    tuneGrid = grid,
-    na.action=na.exclude
+    na.action = na.omit,
+    metric = "ROC"
   )
-})
-
-tuned_logit_lasso_model <- logit_lasso_model$finalModel
-best_lambda <- logit_lasso_model$bestTune$lambda
-logit_models[["LASSO"]] <- logit_lasso_model
-lasso_coeffs <- as.matrix(coef(tuned_logit_lasso_model, best_lambda))
-write.csv(lasso_coeffs, paste0(output, "lasso_logit_coeffs.csv"))
-
-CV_RMSE_folds[["LASSO"]] <- logit_lasso_model$resample[,c("Resample", "RMSE")]
-
-
-#############################################x
-# PART I
-# No loss fn
-########################################
-
-# Draw ROC Curve and calculate AUC for each folds --------------------------------
-CV_AUC_folds <- list()
-
-for (model_name in names(logit_models)) {
-
-  auc <- list()
-  model <- logit_models[[model_name]]
-  for (fold in c("Fold1", "Fold2", "Fold3", "Fold4", "Fold5")) {
-    cv_fold <-
-      model$pred %>%
-      filter(Resample == fold)
-
-    roc_obj <- roc(cv_fold$obs, cv_fold$default)
-    auc[[fold]] <- as.numeric(roc_obj$auc)
-  }
-
-  CV_AUC_folds[[model_name]] <- data.frame("Resample" = names(auc),
-                                              "AUC" = unlist(auc))
-}
-
-# For each model: average RMSE and average AUC for models ----------------------------------
-
-nonCV_RMSE <- list()
-CV_AUC <- list()
-
-for (model_name in names(logit_models)) {
-  CV_RMSE[[model_name]] <- mean(CV_RMSE_folds[[model_name]]$RMSE)
-  CV_AUC[[model_name]] <- mean(CV_AUC_folds[[model_name]]$AUC)
-}
-
-
-```
-
-# LPM
-
-```{r}
-model_lpm <- lm(formula_lpm, data = data_train)
-model_lpm
-```
-
-
-# Logit
-
-```{r}
-model_logit <- glm(formula = formula_log, data = data_train, family = "binomial")
+end <- Sys.time()
 # 
 # Warning messages:
 # 1: glm.fit: algorithm did not converge 
 # 2: glm.fit: fitted probabilities numerically 0 or 1 occurred
 # 
-model_logit
+results[["roc_logit"]] <- mean(model_logit$results$ROC)
+modelname <- "logit model"
+send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
 ```
 
 
-# Probit
+## Probit
 
 ```{r}
-model_probit <- glm(formula = formula_log, data = data_train, family = binomial(link = "probit"))
-# 
-# Warning message:
-# glm.fit: fitted probabilities numerically 0 or 1 occurred 
-# 
-model_probit
+set.seed(1234)
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = TRUE
+)
+
+start <- Sys.time()
+model_probit <- train(
+    formula_log,
+    method = "glm",
+    data = data_train,
+    family = binomial(link = "probit"),
+    trControl = train_control,
+    na.action = na.omit,
+    metric = "ROC"
+  )
+end <- Sys.time()
+results[["roc_probit"]] <- mean(model_probit$results$ROC)
+
+modelname <- "probit model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 ```
 
-# Random Forest
+## Random Forest
 
 ```{r}
-# CV setup
+set.seed(1234)
 trctrl <- trainControl(method = "cv", 
-                       number = 5, 
+                       number = 10, 
                        classProbs = TRUE, 
                        summaryFunction = twoClassSummary,
-                       savePredictions = TRUE)
-trctrl$verboseIter <- TRUE
+                       savePredictions = TRUE,
+                       verboseIter = TRUE)
+tune_grid <- expand.grid(
+  .mtry = c(5, 6, 7),
+  .splitrule = "gini",
+  .min.node.size = c(10, 15)
+)
 
 start <- Sys.time()
 # use all variables?
@@ -283,64 +241,31 @@ model_rf <- train(formula_rf,
                   method = "rf",
                   metric = "ROC",
                   trControl=trctrl,
+                  # tuneGrid =tune_grid,
                   num.threads = 7,
-                 na.action = na.omit)
-
-# 
-# Error: Please use column names for `x`
-# 
+                  na.action = na.omit)
+end <- Sys.time()
 
 send_message()
-model_caret
+results[["roc_random_forest"]] <- mean(model_rf$results$ROC)
 
-# Why are we testing it on the holdout/test set? Only the final classification
-postResample(data_test$is_fg, predict(model_caret, data_test))
+postResample(data_test$is_fg, predict(model_rf, data_test))
 
 # colnames(data_test, 2)
 print(end - start)
+
+modelname <- "random forest model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 ```
 
-```{r}
-## Alternative tuning
-train_control <- trainControl(
-  method = "cv",
-  n = 3,
-  classProbs = TRUE, # same as probability = TRUE in ranger
-  # summaryFunction = twoClassSummaryExtended,
-  savePredictions = TRUE
-)
-train_control$verboseIter <- TRUE
-
-tune_grid <- expand.grid(
-  .mtry = c(5, 6, 7),
-  .splitrule = "gini",
-  .min.node.size = c(10, 15)
-)
-
-# getModelInfo("ranger")
-set.seed(13505)
-rf_model_p <- train(
-  data_train[formula_rf], data_train[["is_fg"]],
-  method = "ranger",
-  data = data_train,
-  tuneGrid = tune_grid,
-  trControl = train_control
-)
-
-# 
-# model fit failed for Fold5: mtry=7, splitrule=gini, min.node.size=15 Error in ranger::ranger(dependent.variable.name = ".outcome", data = x,  : 
-#   formal argument "data" matched by multiple actual arguments
-# 
-  
-```
-
-# Boosting
+## Boosting
 
 ```{r}
+set.seed(1234)
 start_time <- Sys.time()
 # Train model with preprocessing & repeated cv
 trctrl <- trainControl(method = "repeatedcv", 
-                       number = 3, 
+                       number = 10, 
                        repeats = 1, 
                        verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
 
@@ -352,27 +277,20 @@ model_gbm <- train(formula_gbm,
                    # num.threads = 7,
                    na.action = na.omit)
 end_time <- Sys.time()
-model_gbm
 
-# 
-# Error: Please use column names for `x`
-# 
+results[["roc_gbm"]] <- mean(model_gbm$results$ROC)
 
 print(end_time - start_time)
-send_message()
 ```
 
 
-# KNN
+## KNN
 
 ```{r}
 set.seed(1234)
-trctrl <- trainControl(method = "repeatedcv", 
-                       number = 3, repeats = 1, 
-                       verboseIter = TRUE, 
-                       classProbs = TRUE, 
-                       summaryFunction = twoClassSummary)
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 1, verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
 
+start <- Sys.time()
 model_knn <- train(formula_knn, data = data_train, method = "knn",
                  trControl=trctrl,
                  preProcess=c("center", "scale"),
@@ -381,17 +299,20 @@ model_knn <- train(formula_knn, data = data_train, method = "knn",
                  na.action = na.omit
                  #tuneGrid = data.frame(k=c(2:8))
                  )
-model_knn
+end <- Sys.time()
+
+results[["roc_knn"]] <- mean(model_knn$results$ROC)
+
+modelname <- "knn model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+
+knnModelRoc <- roc(predictor = predict(model_knn, data_test, type='prob', decision.values=T)$f_is_fg, response = data_test$f_is_fg)
 
 # 
 # Error in roc.default(predictor = predict(model_knn, data_test, type = "prob",  : 
 #  No valid data provided.
 #
 
-send_message()
-
-lmElasticNetCaret
-knnModelRoc <- roc(predictor = predict(model_knn, data_test, type='prob', decision.values=T)$is_fg, response = data_test$is_fg)
 knnModelRoc
 plot(knnModelRoc)
 
@@ -399,52 +320,20 @@ postResample(SpamTest$count, predict(model_knn, SpamTest))
 ```
 
 
-# Elastic Net
+## Elastic Net
 ```{r}
-set.seed(1234)
-trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary, verboseIter = TRUE, number = 3)
-
-lmElasticNetCaret <- train(formula_enet, 
-                 data = data_train, 
-                 method = "glmnet",
-                 trControl=trctrl,
-                 tuneLength=5,
-                 metric='ROC',
-                 family = "binomial",
-                 # num.threads = 7,
-                 na.action = na.omit
-                 #tuneGrid = data.frame(lambda=seq(0.1,1,0.1), alpha=rep(1, 10))
-)
-
-# 
-# Error in colnames(data) : argument "data" is missing, with no default
-# 
-
-```
-
-
-```{r}
-lasso_tune_grid <- expand.grid(
-  "alpha" = c(1),
-  "lambda" = seq(0.05, 0.5, by = 0.025)
-)
-
-ridge_tune_grid <- expand.grid(
-  "alpha" = c(0),
-  "lambda" = seq(0.05, 0.5, by = 0.025)
-)
-
 enet_tune_grid <- expand.grid(
   "alpha" = seq(0, 1, by = 0.1),
-  "lambda" = union(lasso_tune_grid[["lambda"]], ridge_tune_grid[["lambda"]])
+  "lambda" = seq(0.05, 0.5, by = 0.025)
 )
 
 fit_control <- trainControl(method = "cv", 
-                            number = 3,
+                            number = 10,
                             verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
                             
 
 set.seed(1234)
+start <- Sys.time()
 enet_fit <- train(
   formula_enet,
   data = data_train,
@@ -455,18 +344,37 @@ enet_fit <- train(
   trControl = fit_control,
   na.action = na.omit
 )
+end <- Sys.time()
+
+results[["roc_elastic_net"]] <- mean(enet_fit$results$ROC)
+
+lmElasticNetCaretRoc <- roc(predictor = predict(enet_fit, data_test, type='prob', decision.values=T), response = data_test$f_is_fg)
 
 # 
-# Error in na.fail.default(list(is_fg = c(2, 1, 1, 1, 1, 2, 2, 1, 2, 2,  : 
-#   missing values in object
+# Error in colnames(data) : argument "data" is missing, with no default
 # 
 
-enet_fit
+lmElasticNetCaretRoc
+plot(lmElasticNetCaretRoc)
+
+confusionMatrix(data_test$is_fg, predict(enet_fit, data_test, decision.values=T))
+
+plot(enet_fit)
+
+coef(enet_fit$finalModel, enet_fit$bestTune$lambda)
+postResample(data_test$is_fg, predict(lmElasticNetCaret, data_test))
+
+
+modelname <- "elastic net model"
+send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
 ```
-
 
 # Choose Top 3 Probability Prediction Models based on AUC
 ```{r}
+
+confusionMatrix(data_test$is_fg, predict(enet_fit, data_test, decision.values=T))
+
+plot(enet_fit)
 
 
 
