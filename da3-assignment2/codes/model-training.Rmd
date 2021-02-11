@@ -145,7 +145,7 @@ runtimes <- list()
 # Setup CV
 train_control <- trainControl(
   method = "cv",
-  number = 10,
+  number = 10, 
   classProbs = TRUE,
   summaryFunction = twoClassSummary,
   savePredictions = TRUE,
@@ -173,8 +173,8 @@ runtimes[["lpm"]] <- end-start
 
 # Notification
 time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "lpm model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
+modelname <- "**lpm model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 # Logit ------------------------
 
@@ -198,8 +198,8 @@ runtimes[["logit"]] <- end-start
 
 # Notification
 time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "logit model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
+modelname <- "**logit model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -225,8 +225,8 @@ runtimes[["probit"]] <- end-start
 
 # Notification
 time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "probit model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
+modelname <- "**probit model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -258,8 +258,8 @@ runtimes[["elastic"]] <- end-start
 
 # Notification
 time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "elastic net model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
+modelname <- "**elastic net model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -289,8 +289,8 @@ runtimes[["rf"]] <- end-start
 
 # Notification
 time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "random forest model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
+modelname <- "**random forest model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -314,8 +314,8 @@ runtimes[["gbm"]] <- end-start
 
 # Notification
 time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "gbm model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
+modelname <- "**gbm model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -343,8 +343,8 @@ runtimes[["knn"]] <- end-start
 
 # Notification
 time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "knn model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
+modelname <- "**knn model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 # Release cores from parallel computing
 stopCluster(cluster)
