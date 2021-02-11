@@ -135,8 +135,8 @@ high_corr<-high_corr[!duplicated(high_corr$vars),] %>%
 # Refactored modelling
 ```{r}
 # Setup cluster for parallel computing
-cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
-registerDoParallel(cluster)
+# cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
+# registerDoParallel(cluster)
 
 # Initialize lists
 models <- list()
@@ -185,7 +185,7 @@ model_logit <- train(
     formula_log,
     method = "glm",
     data = data_train,
-    family = binomial,
+    family = binomial(link = "logit"),
     trControl = train_control,
     na.action = na.omit,
     metric = "ROC"
@@ -220,7 +220,7 @@ model_probit <- train(
 end <- Sys.time()
 
 # Save model props
-models[["probit"]] <- model_logit
+models[["probit"]] <- model_probit
 runtimes[["probit"]] <- end-start
 
 # Notification
@@ -299,6 +299,7 @@ send_message(my_text = paste0(user, ", your ", modelname, " has finished trainin
 
 # Train model with CV
 set.seed(1234)
+start <- Sys.time()
 model_gbm <- train(formula_gbm,
                    data = data_train,
                    method = "gbm",
@@ -306,7 +307,7 @@ model_gbm <- train(formula_gbm,
                    verbose = 0,
                    # num.threads = 7,
                    na.action = na.omit)
-end_time <- Sys.time()
+end <- Sys.time()
 
 # Save model props
 models[["gbm"]] <- model_gbm
@@ -347,7 +348,7 @@ modelname <- "**knn model**"
 send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 # Release cores from parallel computing
-stopCluster(cluster)
+# stopCluster(cluster)
 ```
 
 
