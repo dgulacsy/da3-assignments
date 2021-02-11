@@ -98,7 +98,7 @@ formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, f
 formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
-formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext,financial_basic_ratios,financial_ext_ratios,X1),collapse = " + ")))) 
 ```
 
 # EDA
