@@ -90,17 +90,16 @@ financial_basic <- c("sales_mil","curr_assets","curr_liab","fixed_assets","tang_
 financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax","d1_profit")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
 financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
-flags <- colnames(df %>% select(matches("*.flag.")))
 
 # Interactions
 X1<-paste("ind2_cat",c("urban","region","labor_avg","age","sales_mil_log","d1_sales_mil_log","ceo_age","ceo_female","ceo_foreign"),sep = '*')
 
 formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + "))))
 formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + ")))) 
-formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
+formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 ```
 
 # EDA
@@ -132,276 +131,8 @@ high_corr<-high_corr[!duplicated(high_corr$vars),] %>%
 
 ```
 
-# Modelling
 
-```{r}
-results <- list()
-```
-
-
-## LPM
-
-```{r}
-set.seed(1234)
-train_control <- trainControl(
-  method = "cv",
-  number = 10,
-  classProbs = TRUE,
-  summaryFunction = twoClassSummary,
-  savePredictions = TRUE
-)
-
-start <- Sys.time()
-model_lpm <- train(
-    formula_log,
-    method = "glm",
-    data = data_train,
-    trControl = train_control,
-    na.action = na.omit,
-    metric = "ROC"
-  )
-end <- Sys.time()
-
-modelname <- "lpm model"
-time <- as.numeric(round(end - start, 2), unit = "mins")
-send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
-
-
-
-results[["roc_lpm"]] <- mean(model_lpm$resample$ROC)
-```
-
-
-## Logit
-
-```{r}
-set.seed(1234)
-train_control <- trainControl(
-  method = "cv",
-  number = 10,
-  classProbs = TRUE,
-  summaryFunction = twoClassSummary,
-  savePredictions = TRUE
-)
-
-start <- Sys.time()
-model_logit <- train(
-    formula_log,
-    method = "glm",
-    data = data_train,
-    family = binomial,
-    trControl = train_control,
-    na.action = na.omit,
-    metric = "ROC"
-  )
-end <- Sys.time()
-# 
-# Warning messages:
-# 1: glm.fit: algorithm did not converge 
-# 2: glm.fit: fitted probabilities numerically 0 or 1 occurred
-# 
-results[["roc_logit"]] <- mean(model_logit$results$ROC)
-modelname <- "logit model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
-```
-
-
-## Probit
-
-```{r}
-set.seed(1234)
-train_control <- trainControl(
-  method = "cv",
-  number = 10,
-  classProbs = TRUE,
-  summaryFunction = twoClassSummary,
-  savePredictions = TRUE
-)
-
-start <- Sys.time()
-model_probit <- train(
-    formula_log,
-    method = "glm",
-    data = data_train,
-    family = binomial(link = "probit"),
-    trControl = train_control,
-    na.action = na.omit,
-    metric = "ROC"
-  )
-end <- Sys.time()
-results[["roc_probit"]] <- mean(model_probit$results$ROC)
-
-modelname <- "probit model"
-time <- as.numeric(round(end - start, 2), unit = "mins")
-send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
-```
-
-## Random Forest
-
-```{r}
-set.seed(1234)
-trctrl <- trainControl(method = "cv", 
-                       number = 10, 
-                       classProbs = TRUE, 
-                       summaryFunction = twoClassSummary,
-                       savePredictions = TRUE,
-                       verboseIter = TRUE)
-tune_grid <- expand.grid(
-  .mtry = c(5, 6, 7),
-  .splitrule = "gini",
-  .min.node.size = c(10, 15)
-)
-
-start <- Sys.time()
-# use all variables?
-model_rf <- train(formula_rf,
-                  data = data_train, 
-                  method = "rf",
-                  metric = "ROC",
-                  trControl=trctrl,
-                  # tuneGrid =tune_grid,
-                  num.threads = 7,
-                  na.action = na.omit)
-end <- Sys.time()
-
-results[["roc_random_forest"]] <- mean(model_rf$results$ROC)
-
-postResample(data_test$is_fg, predict(model_rf, data_test))
-
-# colnames(data_test, 2)
-time <- as.numeric(round(end - start, 2), unit = "mins")
-
-modelname <- "random forest model"
-time <- as.numeric(round(end - start, 2), unit = "mins")
-send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
-```
-
-## Boosting
-
-```{r}
-set.seed(1234)
-start_time <- Sys.time()
-# Train model with preprocessing & repeated cv
-trctrl <- trainControl(method = "repeatedcv", 
-                       number = 10, 
-                       repeats = 1, 
-                       verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
-
-model_gbm <- train(formula_gbm,
-                   data = data_train,
-                   method = "gbm",
-                   trControl = trctrl,
-                   verbose = 0,
-                   # num.threads = 7,
-                   na.action = na.omit)
-end_time <- Sys.time()
-
-results[["roc_gbm"]] <- mean(model_gbm$results$ROC)
-
-print(end_time - start_time)
-
-modelname <- "gbm model"
-time <- as.numeric(round(end - start, 2), unit = "mins")
-send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
-```
-
-
-## KNN
-
-```{r}
-set.seed(1234)
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 1, verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
-
-start <- Sys.time()
-model_knn <- train(formula_knn, data = data_train, method = "knn",
-                 trControl=trctrl,
-                 preProcess=c("center", "scale"),
-                 tuneLength=20,
-                 # num.threads = 7
-                 na.action = na.omit
-                 #tuneGrid = data.frame(k=c(2:8))
-                 )
-end <- Sys.time()
-
-results[["roc_knn"]] <- mean(model_knn$results$ROC)
-
-modelname <- "knn model"
-time <- as.numeric(round(end - start, 2), unit = "mins")
-send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
-
-knnModelRoc <- roc(predictor = predict(model_knn, data_test, type='prob', decision.values=T)$f_is_fg, response = data_test$f_is_fg)
-
-# 
-# Error in roc.default(predictor = predict(model_knn, data_test, type = "prob",  : 
-#  No valid data provided.
-#
-
-knnModelRoc
-plot(knnModelRoc)
-
-postResample(SpamTest$count, predict(model_knn, SpamTest))
-```
-
-
-## Elastic Net
-```{r}
-enet_tune_grid <- expand.grid(
-  "alpha" = seq(0, 1, by = 0.1),
-  "lambda" = seq(0.05, 0.5, by = 0.025)
-)
-
-fit_control <- trainControl(method = "cv", 
-                            number = 10,
-                            verboseIter = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
-                            
-
-set.seed(1234)
-start <- Sys.time()
-enet_fit <- train(
-  formula_enet,
-  data = data_train,
-  method = "glmnet",
-  preProcess = c("center", "scale"),
-  tuneGrid = enet_tune_grid,
-  family = "binomial",
-  trControl = fit_control,
-  na.action = na.omit
-)
-end <- Sys.time()
-
-results[["roc_elastic_net"]] <- mean(enet_fit$results$ROC)
-
-lmElasticNetCaretRoc <- roc(predictor = predict(enet_fit, data_test, type='prob', decision.values=T), response = data_test$f_is_fg)
-
-# 
-# Error in colnames(data) : argument "data" is missing, with no default
-# 
-
-lmElasticNetCaretRoc
-plot(lmElasticNetCaretRoc)
-
-confusionMatrix(data_test$is_fg, predict(enet_fit, data_test, decision.values=T))
-
-plot(enet_fit)
-
-coef(enet_fit$finalModel, enet_fit$bestTune$lambda)
-postResample(data_test$is_fg, predict(lmElasticNetCaret, data_test))
-
-
-modelname <- "elastic net model"
-time <- as.numeric(round(end - start, 2), unit = "mins")
-send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
-```
-
-```{r}
-
-confusionMatrix(data_test$is_fg, predict(enet_fit, data_test, decision.values=T))
-
-plot(enet_fit)
-
-```
-
-# Recode modelling
+# Refactored modelling
 ```{r}
 # Setup cluster for parallel computing
 cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
@@ -421,6 +152,29 @@ train_control <- trainControl(
   allowParallel = TRUE,
   verboseIter = TRUE
 )
+
+# LPM ------------------------
+
+set.seed(1234)
+start <- Sys.time()
+model_lpm <- train(
+  formula_lpm,
+  method = "glm",
+  data = data_train,
+  trControl = train_control,
+  na.action = na.omit,
+  metric = "ROC"
+)
+end <- Sys.time()
+
+# Save model props
+models[["lpm"]] <- model_lpm
+runtimes[["lpm"]] <- end-start
+
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "lpm model"
+send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 # Logit ------------------------
 
@@ -443,8 +197,9 @@ models[["logit"]] <- model_logit
 runtimes[["logit"]] <- end-start
 
 # Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
 modelname <- "logit model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
+send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -469,8 +224,9 @@ models[["probit"]] <- model_logit
 runtimes[["probit"]] <- end-start
 
 # Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
 modelname <- "probit model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -491,7 +247,7 @@ model_elastic <- train(
   preProcess = c("center", "scale"),
   tuneGrid = enet_tune_grid,
   family = "binomial",
-  trControl = fit_control,
+  trControl = train_control,
   na.action = na.omit
 )
 end <- Sys.time()
@@ -501,8 +257,9 @@ models[["elastic"]] <- model_elastic
 runtimes[["elastic"]] <- end-start
 
 # Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
 modelname <- "elastic net model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -520,7 +277,7 @@ model_rf <- train(formula_rf,
                   data = data_train, 
                   method = "rf",
                   metric = "ROC",
-                  trControl=trctrl,
+                  trControl=train_control,
                   # tuneGrid =tune_grid,
                   num.threads = 7,
                   na.action = na.omit)
@@ -531,8 +288,9 @@ models[["rf"]] <- model_elastic
 runtimes[["rf"]] <- end-start
 
 # Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
 modelname <- "random forest model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -544,7 +302,7 @@ set.seed(1234)
 model_gbm <- train(formula_gbm,
                    data = data_train,
                    method = "gbm",
-                   trControl = trctrl,
+                   trControl = train_control,
                    verbose = 0,
                    # num.threads = 7,
                    na.action = na.omit)
@@ -555,8 +313,9 @@ models[["gbm"]] <- model_gbm
 runtimes[["gbm"]] <- end-start
 
 # Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
 modelname <- "gbm model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -567,9 +326,9 @@ set.seed(1234)
 start <- Sys.time()
 model_knn <- train(
   formula_knn, 
-  data = data_train, 
+  data = data_train,
   method = "knn",
-  trControl=trctrl,
+  trControl=train_control,
   preProcess=c("center", "scale"),
   tuneLength=20,
   # num.threads = 7,
@@ -583,15 +342,13 @@ models[["knn"]] <- model_knn
 runtimes[["knn"]] <- end-start
 
 # Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
 modelname <- "knn model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+send_message(my_text = paste0(user, "your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 # Release cores from parallel computing
 stopCluster(cluster)
 ```
-
-
-
 
 
 # Choose Top 3 Probability Prediction Models based on AUC
