@@ -15,8 +15,12 @@ knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, cache = T)
 
 [Github Repo](https://github.com/dgulacsy/da3-assignments/tree/main/da3-assignment2)
 
-```{r load_libraries, include=FALSE}
+```{r include=FALSE}
 rm(list = ls())
+```
+
+
+```{r load_libraries, include=FALSE}
 # General
 library(tidyverse)
 # Modeling
@@ -341,29 +345,30 @@ send_message(my_text = paste0(user, ", your ", modelname, " has finished trainin
 ```
 
 
-```{r calibration_curve}
-
+```{r calibration_curve, include=FALSE}
 # Create calibration curves ----------------------
-data_test$gbm_no_loss_pred <- predict(model_gbm, newdata = data_test, type = "prob")$fast_growth
-data_test$rf_no_loss_pred <- predict(model_rf, newdata = data_test, type = "prob")$fast_growth
-data_test$logit_no_loss_pred <- predict(model_logit, newdata = data_test, type = "prob")$fast_growth
+calib_data<-na.omit(data_test)
+calib_data$gbm_no_loss_pred <- predict(model_gbm, newdata = calib_data, type = "prob")$fast_growth
+calib_data$rf_no_loss_pred <- predict(model_rf, newdata = calib_data, type = "prob")$fast_growth
 
-calib_gbm<-create_calibration_plot(data_test, 
+calib_gbm<-create_calibration_plot(calib_data, 
   file_name = "best-model-calibration", 
   prob_var = "gbm_no_loss_pred", 
   actual_var = "is_fg",
   n_bins = 10)
 
-calib_rf<-create_calibration_plot(data_test, 
+calib_rf<-create_calibration_plot(calib_data, 
   file_name = "best-model-calibration", 
   prob_var = "rf_no_loss_pred", 
   actual_var = "is_fg",
   n_bins = 10)
 
-calib_curves<-plot_grid(calib_gbm$plot+labs(subtitle = "GBM (No loss function)"),calib_rf$plot+labs(subtitle = "Random Forest (No loss function)"), nrow = 1,ncol=2)
-calib_curves
+calib_curves <- plot_grid(calib_gbm$plot+labs(subtitle = "GBM (No loss function)"),calib_rf$plot+labs(subtitle = "Random Forest (No loss function)"), nrow = 1,ncol=2)
+```
 
-kable(calib1$bins)
+
+```{r echo=FALSE}
+calib_curves
 ```
 
 # Choose Top 3 Probability Prediction Models based on AUC
