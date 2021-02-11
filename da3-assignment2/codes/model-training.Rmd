@@ -43,20 +43,13 @@ source("codes/helper.R")
 ```{r}
 df <- read_rds("data/clean/fast-growth-firms-workfile.rds")
 
-# df$is_fg <- as.factor(df$is_fg)
-# df$f_is_fg <- as.factor(ifelse(df$f_is_fg == "fast growth", "fast_growth", "no_fast_growth"))
-
-skim(df)
+# skim(df)
 
 # create smaller sample to test models
 samp_size <- round(nrow(df) / 20)
 set.seed(1234)
 df <- sample_n(df, samp_size)
-nrow(df)
-df <- df[!is.na(df$is_fg),]
-nrow(df)
-# df <- na.omit(df)
-nrow(df)
+
 
 set.seed(1234)
 training_ratio <- 0.7
@@ -96,7 +89,6 @@ formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_b
 
 # EDA
 ```{r}
-
 df %>% select(where(is.numeric)) %>% ggcorr(layout.exp = 1)
 ggpairs(df, columns = c(target, business))
 
@@ -119,7 +111,11 @@ high_corr$vars<-unlist(lapply(1:nrow(high_corr),function(i){
 }))
 high_corr<-high_corr[!duplicated(high_corr$vars),]
 high_corr
+```
 
+# Modelling
+
+```{r}
 ### In progress -----------------
 
 # 5 fold cross-validation
@@ -224,8 +220,6 @@ for (model_name in names(logit_models)) {
 
 ```
 
-# Modelling
-
 # LPM
 
 ```{r}
@@ -239,8 +233,9 @@ model_lpm
 ```{r}
 model_logit <- glm(formula = formula_log, data = data_train, family = "binomial")
 # 
-# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-#   contrasts can be applied only to factors with 2 or more levels
+# Warning messages:
+# 1: glm.fit: algorithm did not converge 
+# 2: glm.fit: fitted probabilities numerically 0 or 1 occurred
 # 
 model_logit
 ```
@@ -251,9 +246,10 @@ model_logit
 ```{r}
 model_probit <- glm(formula = formula_log, data = data_train, family = binomial(link = "probit"))
 # 
-# Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-#   contrasts can be applied only to factors with 2 or more levels
+# Warning message:
+# glm.fit: fitted probabilities numerically 0 or 1 occurred 
 # 
+model_probit
 ```
 
 # Random Forest
@@ -377,7 +373,7 @@ postResample(SpamTest$count, predict(model_knn, SpamTest))
 # Elastic Net
 ```{r}
 set.seed(1234)
-trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary, verboseIter = TRUE, number = 3, classProbs = TRUE, summaryFunction = twoClassSummary)
+trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary, verboseIter = TRUE, number = 3)
 
 lmElasticNetCaret <- train(formula_enet, 
                  data = data_train, 
@@ -395,6 +391,11 @@ lmElasticNetCaret <- train(formula_enet,
 
 lmElasticNetCaret
 lmElasticNetCaretRoc <- roc(predictor = predict(lmElasticNetCaret, data_test, type='prob', decision.values=T), response = data_test$f_is_fg)
+
+# 
+# Error in colnames(data) : argument "data" is missing, with no default
+# 
+
 lmElasticNetCaretRoc
 plot(lmElasticNetCaretRoc)
 
