@@ -142,8 +142,12 @@ model_lpm <- train(
     metric = "ROC"
   )
 end <- Sys.time()
+
 modelname <- "lpm model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
+time <- as.numeric(round(end - start, 2), unit = "mins")
+send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
+
+
 
 results[["roc_lpm"]] <- mean(model_lpm$resample$ROC)
 ```
@@ -179,7 +183,8 @@ end <- Sys.time()
 # 
 results[["roc_logit"]] <- mean(model_logit$results$ROC)
 modelname <- "logit model"
-send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
+time <- as.numeric(round(end - start, 2), unit = "mins")
+send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
 ```
 
 
@@ -209,7 +214,8 @@ end <- Sys.time()
 results[["roc_probit"]] <- mean(model_probit$results$ROC)
 
 modelname <- "probit model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+time <- as.numeric(round(end - start, 2), unit = "mins")
+send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
 ```
 
 ## Random Forest
@@ -240,16 +246,16 @@ model_rf <- train(formula_rf,
                   na.action = na.omit)
 end <- Sys.time()
 
-send_message()
 results[["roc_random_forest"]] <- mean(model_rf$results$ROC)
 
 postResample(data_test$is_fg, predict(model_rf, data_test))
 
 # colnames(data_test, 2)
-print(end - start)
+time <- as.numeric(round(end - start, 2), unit = "mins")
 
 modelname <- "random forest model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+time <- as.numeric(round(end - start, 2), unit = "mins")
+send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
 ```
 
 ## Boosting
@@ -277,7 +283,8 @@ results[["roc_gbm"]] <- mean(model_gbm$results$ROC)
 print(end_time - start_time)
 
 modelname <- "gbm model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+time <- as.numeric(round(end - start, 2), unit = "mins")
+send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
 ```
 
 
@@ -301,7 +308,8 @@ end <- Sys.time()
 results[["roc_knn"]] <- mean(model_knn$results$ROC)
 
 modelname <- "knn model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+time <- as.numeric(round(end - start, 2), unit = "mins")
+send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
 
 knnModelRoc <- roc(predictor = predict(model_knn, data_test, type='prob', decision.values=T)$f_is_fg, response = data_test$f_is_fg)
 
@@ -363,6 +371,7 @@ postResample(data_test$is_fg, predict(lmElasticNetCaret, data_test))
 
 
 modelname <- "elastic net model"
-send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+time <- as.numeric(round(end - start, 2), unit = "mins")
+send_message(my_text = paste0(user, " your ", modelname, " has finished training! It took: ", time, " minutes"))
 ```
 
