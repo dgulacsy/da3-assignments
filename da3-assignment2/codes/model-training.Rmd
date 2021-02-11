@@ -95,10 +95,10 @@ X1<-paste("ind2_cat",c("urban","region","labor_avg","age","sales_mil_log","d1_sa
 
 formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + "))))
 formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + ")))) 
-formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
-formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, financial_basic),collapse = " + "))))  # ceo,sales, financial_ext, financial_basic_ratios, 
+formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
+formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 ```
 
 # EDA
@@ -249,7 +249,7 @@ model_rf <- train(formula_rf,
                   data = data_train, 
                   method = "rf",
                   metric = "ROC",
-                  trControl=trctrl,
+                  trControl=train_control,
                   # tuneGrid =tune_grid,
                   num.threads = 7,
                   na.action = na.omit)
@@ -273,7 +273,7 @@ set.seed(1234)
 model_gbm <- train(formula_gbm,
                    data = data_train,
                    method = "gbm",
-                   trControl = trctrl,
+                   trControl = train_control,
                    verbose = 0,
                    # num.threads = 7,
                    na.action = na.omit)
@@ -296,9 +296,9 @@ set.seed(1234)
 start <- Sys.time()
 model_knn <- train(
   formula_knn, 
-  data = data_train, 
+  data = data_train,
   method = "knn",
-  trControl=trctrl,
+  trControl=train_control,
   preProcess=c("center", "scale"),
   tuneLength=20,
   # num.threads = 7,
