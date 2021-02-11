@@ -23,3 +23,6 @@ party
 GGally
 pROC
 knitr
+jsonlite
+xml2
+rvest

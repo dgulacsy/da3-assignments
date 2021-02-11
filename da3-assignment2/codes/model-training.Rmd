@@ -15,8 +15,12 @@ knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, cache = T)
 
 [Github Repo](https://github.com/dgulacsy/da3-assignments/tree/main/da3-assignment2)
 
-```{r}
+```{r include=FALSE}
 rm(list = ls())
+```
+
+
+```{r load_libraries, include=FALSE}
 # General
 library(tidyverse)
 # Modeling
@@ -37,10 +41,10 @@ source("codes/helper.R")
 ```
 
 # Introduction
-In this analytics project we are aiming to find the best model to identify fast growth firms based on their various characteristics and financial indicators. To place this task into a business environment we assumed that the main business motivation behind this whole analytics project is to identify those firms that worth investing in. We did not define a specific form of investment worth considering the recommended firms may be considered for fusion, acquisition or simple buy-in. To find the best a model, first of all we go through all the steps of sample design, label engineering and feature engineering. We also look at some results of our exploratory data analysis to see which particular aspects of the data we should keep in mind and what kind of model specifications we should come up. During our analysis we run altogether 7 probability prediction models and we do classification on 3 of them. We compare and assess their results and recommend a final model for the classification problem.
+In this analytics project we are aiming to find the best model to identify fast growth firms based on their various characteristics and financial indicators. To place this task into a business environment we assumed that the main business motivation behind this whole analytics project is to identify those firms that worth investing in. We did not define a specific form of investment worth considering the recommended firms may be considered for fusion, acquisition or simple buy-in. To find the best model, first of all we go through all the steps of sample design, label engineering and feature engineering. We also look at some results of our exploratory data analysis to see which particular aspects of the data we should keep in mind and what kind of model specifications we should come up with. During our analysis we run altogether 6 probability prediction models and we do classification on 3 of them. We compare and assess their results and recommend a final model for the classification problem.
 
 # Label engineering
-In order to build a model to classify business fast growing and not we first of all need to define which firms we regards as fast growing. In our analysis we used the annual profit as a starting point. We considered those companies as fast growing which had larger than 10% profit growth on a 2-years basis. Since profit might be negative we needed to be thoughtful. Eventually, we decided to also include those firms in the "fast growth" category which had losses in the base year but at least 10% less losses two years later. Although this form of definition may seem logical we had to go through lot of alternatives. First of all we could have used sales rather than profit but we thought that profit is closer in meaning to value creation from a business side. Revenue may increase slower than operational expenses or even COGS which indeed may indicate fast growth but certainly not a sustainable one. Secondly, we might have also chosen to use a one year period however, we wanted to make sure the growth is not tied to a one-off event but it is rather start of a long-term positive trend. We could have also chosen to use a relative threshold to define large growth. The main advantage of such threshold is that it takes into account general economic circumstances since companies are compared to each other. This means that in case of an unfavorable environment we would detect the most successful survivers who can even grow in an adverse situation however this growth is likely to be incremental to generate substantial financial gain on the short term. This approach is rather focused on further cash flows. However with using an absolute threshold we get a more consistent rule and more focused on short-term cash flows.
+In order to build a model to classify business fast growing and not we first of all need to define which firms we regards as fast growing. In our analysis we used the annual profit as a starting point. We considered those companies as fast growing which had larger than 10% profit growth on a 2-years basis. Since profit might be negative we needed to be thoughtful. Eventually, we decided to also include those firms in the "fast growth" category which had losses in the base year but at least 10% less losses two years later. Although this form of definition may seem logical we had to go through lot of alternatives. First of all we could have used sales rather than profit but we thought that profit is closer in meaning to value creation from a business side. Revenue may increase slower than operational expenses or even COGS which indeed may indicate fast growth but certainly not a sustainable one. Secondly, we might have also chosen to use a one year period however, we wanted to make sure the growth is not tied to a one-off event but it is rather start of a long-term positive trend. We could have also chosen to use a relative threshold to define large growth. The main advantage of such threshold is that it takes into account general economic circumstances since companies are compared to each other. This means that in case of an unfavorable environment we would detect the most successful survivers who can even grow in an adverse situation however this growth is likely to be incremental to generate substantial financial gain on the short term. This approach is rather focused on further cash flows. However with using an absolute threshold we get a more consistent rule and more focused on short-term cash flows. 
 
 
 # Data Cleaning/Wrangling
@@ -51,7 +55,7 @@ To conduct our analysis we used a dataset from the information company Bisnode. 
 
 ## Train test split
 
-```{r}
+```{r train_test_split, include=F}
 df <- read_rds("data/clean/fast-growth-firms-workfile.rds")
 
 # skim(df)
@@ -76,7 +80,7 @@ data_test <- df[-train_indices, ]
 
 ## Variable selection
 
-```{r}
+```{r var_select, include=F}
 # Variable sets
 target <- c("f_is_fg","is_fg")
 business<- c("ind2_cat","urban","region","labor_avg","flag_miss_labor_avg","age","age2","new")
@@ -93,18 +97,18 @@ financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
 # Interactions
 X1<-paste("ind2_cat",c("urban","region","labor_avg","age","sales_mil_log","d1_sales_mil_log","ceo_age","ceo_female","ceo_foreign"),sep = '*')
 
-formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, financial_ext_ratios),collapse = " + "))))
-formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, financial_ext_ratios),collapse = " + ")))) 
+formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + "))))
+formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + ")))) 
 formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
-formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext,financial_basic_ratios,financial_ext_ratios,X1),collapse = " + ")))) 
+formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 ```
 
 # EDA
-```{r}
-p <- ggplot(select(df,c("f_is_fg","sales_mil","age","curr_assets")), aes(sales_mil,mpg)) + geom_point() 
-p + facet_wrap(cyl~am+vs, labeller = label_wrap_gen(multi_line=FALSE))
+We investigated correlations between our predictors to see if there are any multicollinearity among them. Altough it is high, there was no perfect collinearity discovered.
+
+```{r eda, include=F}
 
 # df %>% select(where(is.numeric)) %>% ggcorr(layout.exp = 1)
 # ggpairs(df, columns = c(target, business))
@@ -134,7 +138,7 @@ kable(top_n(high_corr,5),caption = "Check variables for multicollinearity and pe
 ```
 
 # Model building
-```{r, results='hide'}
+```{r modeling, results='hide'}
 # Setup cluster for parallel computing
 # cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
 # registerDoParallel(cluster)
@@ -285,12 +289,12 @@ model_rf <- train(formula_rf,
 end <- Sys.time()
 
 # Save model props
-models[["rf"]] <- model_elastic
+models[["rf"]] <- model_rf
 runtimes[["rf"]] <- end-start
 
 # Notification
 time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "**random forest model**"
+modelname <- "random forest model"
 send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
@@ -349,13 +353,52 @@ modelname <- "**knn model**"
 send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 # Release cores from parallel computing
-stopCluster(cluster)
+# stopCluster(cluster)
 ```
 
+We are going to build two logistic regression models (one using logit the other probit as their link function), an elastic net regularized regression model, a K-nearest neighbor classificator, a random forest model and finally a gradient boosting machine. Each model will be cross validated 10 times using the same sample, and the top 3 model will be selected based on the highest cross-validated ROC value. We will use these models to find the optimal threshold according to a pre-determined loss function and compare the expected loss between the models. Finally we will evaluate model performance on a test sample.
 
-```{r}
+# Choose Top 3 Probability Prediction Models based on AUC
+
+```{r top3_models, include=F}
+# Calculate mean CV AUCs and choose top 3 models to use for classification
+cv_aucs<-sort(unlist(lapply(models, function(model){
+  mean(model$resample$ROC)
+})),decreasing = T)
+top_n<-3
+
+top_models<-models[names(cv_aucs[1:top_n])]
+# Get the average ROC across 10 fold CV for each model.
+rocs <- list()
+for (model in 1:length(models)) {
+  modelname <- names(models)[model]
+  rocs[modelname] <- mean(models[[model]]$resample$ROC)
+}
+rocs
+
+# Detailed ROC values for each model
+rocs_det <- list()
+for (model in 1:length(models)) {
+  modelname <- names(models)[model]
+  rocs_det[modelname] <- list(models[[model]]$resample$ROC)
+}
+rocs_det
+
+
+```
+
+Based on the CV ROC performance of our six models, we chose GBM, random forest and logistic regression with logit link function. 
+
+Their CV performance can be seen in this table.
+
+```{r echo=FALSE}
+kable(round(unlist(rocs), 3), col.names = "ROC")
+```
+
+Without defining a loss function we checked whether our best models were appropriately callibrated using callibration curves, that you can take a look at below.
+
+```{r calibration_curve, include=FALSE}
 # Create calibration curves ----------------------
-
 calib_data<-na.omit(data_test)
 calib_data$gbm_no_loss_pred <- predict(model_gbm, newdata = calib_data, type = "prob")$fast_growth
 calib_data$rf_no_loss_pred <- predict(model_rf, newdata = calib_data, type = "prob")$fast_growth
@@ -372,28 +415,17 @@ calib_rf<-create_calibration_plot(calib_data,
   actual_var = "is_fg",
   n_bins = 10)
 
-calib_curves<-plot_grid(calib_gbm$plot+labs(subtitle = "GBM (No loss function)"),calib_rf$plot+labs(subtitle = "Random Forest (No loss function)"), nrow = 1,ncol=2)
-calib_curves
-
-kable(calib_gbm$bins)
+calib_curves <- plot_grid(calib_gbm$plot+labs(subtitle = "GBM (No loss function)"),calib_rf$plot+labs(subtitle = "Random Forest (No loss function)"), nrow = 1,ncol=2)
 ```
 
-# Choose Top 3 Probability Prediction Models based on AUC
-```{r}
 
-# Calculate mean CV AUCs and choose top 3 models to use for classification
-cv_aucs<-sort(unlist(lapply(models, function(model){
-  mean(model$resample$ROC)
-})),decreasing = T)
-top_n<-3
-
-top_models<-models[names(cv_aucs[1:top_n])]
-
+```{r echo=FALSE}
+calib_curves
 ```
 
 # Run classification with loss function
 
-```{r}
+```{r calssification, include=F}
 ########################################
 # Classification with a loss function
 ########################################
@@ -462,9 +494,12 @@ models_summary <- data.frame(
   "Threshold for Fold5" = sapply(models_cv_threshold, function(x) {x$threshold}),
   "Avg expected loss" = unlist(expected_loss),
   "Expected loss for Fold5" = unlist(models_cv_expected_loss))
+```
 
 
+Next, we ran a cross validation on choosing the loss function with the minimal expected loss. The results can be seen in this table. 
 
+```{r echo=FALSE}
 # Choose GBM
 kable(models_summary)
 
@@ -472,7 +507,7 @@ kable(models_summary)
 
 # Test model performance
 
-```{r}
+```{r test_performance, include=F}
 # Take model to test and estimate RMSE, AUC and expected loss ------------------------------------
 
 data_test<-na.omit(data_test)
@@ -498,7 +533,9 @@ test_results<-data.frame(
   `Test RMSE`= test_rmse,
   `Test AUC`= test_auc, 
   `Avg. Exp. Loss`=test_avg_expected_loss)
+```
 
 kable(test_results)
 ```
 
+==== BASE ====
