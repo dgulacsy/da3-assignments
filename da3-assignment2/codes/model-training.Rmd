@@ -256,7 +256,7 @@ model_rf <- train(formula_rf,
 end <- Sys.time()
 
 # Save model props
-models[["rf"]] <- model_elastic
+models[["rf"]] <- model_rf
 runtimes[["rf"]] <- end-start
 
 # Notification
@@ -266,7 +266,6 @@ send_message(my_text = paste0(user, " your ", modelname, " has finished training
 ###################################################
 
 # GBM ------------------------
-
 
 # Train model with CV
 set.seed(1234)
@@ -322,7 +321,13 @@ stopCluster(cluster)
 
 # Choose Top 3 Probability Prediction Models based on AUC
 ```{r}
-#top3_models<-
+
+# Calculate mean CV AUCs and choose top 3 models to use for classification
+cv_aucs<-sort(unlist(lapply(models, function(model){
+  mean(model$resample$ROC)
+})),decreasing = T)
+
+top_models<-models[names(cv_aucs[1:3])]
 
 ```
 
@@ -346,19 +351,21 @@ cost = FN/FP
 # the prevalence, or the proportion of cases in the population (n.cases/(n.controls+n.cases))
 prevelance = sum(data_train$is_fg)/length(data_train$is_fg)
 
+
 # Draw ROC Curve and find optimal threshold with loss function --------------------------
 
 best_tresholds <- list()
 expected_loss <- list()
-logit_cv_rocs <- list()
-logit_cv_threshold <- list()
-logit_cv_expected_loss <- list()
+cv_rocs <- list()
+cv_threshold <- list()
+cv_expected_loss <- list()
 
-for (model_name in names(logit_models)) {
-
-  model <- logit_models[[model_name]]
+for (model_name in names(top_models)) {
+  
+  model <- top_models[[model_name]]
   colname <- paste0(model_name,"_prediction")
-
+  
+  best_tuning_parameters
   best_tresholds_cv <- list()
   expected_loss_cv <- list()
 
@@ -367,7 +374,7 @@ for (model_name in names(logit_models)) {
       model$pred %>%
       filter(Resample == fold)
 
-    roc_obj <- roc(cv_fold$obs, cv_fold$default)
+    roc_obj <- roc(cv_fold$obs, cv_fold$fast_growth)
     best_treshold <- coords(roc_obj, "best", ret="all", transpose = FALSE,
                             best.method="youden", best.weights=c(cost, prevelance))
     best_tresholds_cv[[fold]] <- best_treshold$threshold
@@ -379,9 +386,9 @@ for (model_name in names(logit_models)) {
   expected_loss[[model_name]] <- mean(unlist(expected_loss_cv))
 
   # for fold #5
-  logit_cv_rocs[[model_name]] <- roc_obj
-  logit_cv_threshold[[model_name]] <- best_treshold
-  logit_cv_expected_loss[[model_name]] <- expected_loss_cv[[fold]]
+  cv_rocs[[model_name]] <- roc_obj
+  cv_threshold[[model_name]] <- best_treshold
+  cv_expected_loss[[model_name]] <- expected_loss_cv[[fold]]
 
   }
 
