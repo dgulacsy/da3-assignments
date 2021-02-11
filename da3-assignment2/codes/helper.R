@@ -30,6 +30,55 @@ vss <- function(df) {
   }
 }
 
+#createLossPlot <- function(r, best_coords, file_name,  mywidth_large=12, myheight_large = 9) {
+createLossPlot <- function(r, best_coords, file_name,  myheight_small = 5.625, mywidth_small = 7.5) {
+  t <- best_coords$threshold[1]
+  sp <- best_coords$specificity[1]
+  se <- best_coords$sensitivity[1]
+  n <- rowSums(best_coords[c("tn", "tp", "fn", "fp")])[1]
+  
+  all_coords <- coords(r, x="all", ret="all", transpose = FALSE)
+  all_coords <- all_coords %>%
+    mutate(loss = (fp*FP + fn*FN)/n)
+  l <- all_coords[all_coords$threshold == t, "loss"]
+  
+  loss_plot <- ggplot(data = all_coords, aes(x = threshold, y = loss)) +
+    geom_line(color="green", size=0.7) +
+    scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+    geom_vline(xintercept = t , color = "red" ) +
+    annotate(geom = "text", x = t, y= min(all_coords$loss),
+             label=paste0("best threshold: ", round(t,2)),
+             colour="blue", angle=90, vjust = -1, hjust = -0.5, size = 7) +
+    annotate(geom = "text", x = t, y= l,
+             label= round(l, 2), hjust = -0.3, size = 7)
+  loss_plot
+}
+
+createRocPlotWithOptimal <- function(r, best_coords, file_name,  myheight_small = 5.625, mywidth_small = 7.5) {
+  
+  all_coords <- coords(r, x="all", ret="all", transpose = FALSE)
+  t <- best_coords$threshold[1]
+  sp <- best_coords$specificity[1]
+  se <- best_coords$sensitivity[1]
+  
+  roc_plot <- ggplot(data = all_coords, aes(x = specificity, y = sensitivity)) +
+    geom_line(color="green", size=0.7) +
+    scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+    scale_x_reverse(breaks = seq(0, 1, by = 0.1)) +
+    geom_point(aes(x = sp, y = se)) +
+    annotate(geom = "text", x = sp, y = se,
+             label = paste(round(sp, 2),round(se, 2),sep = ", "),
+             hjust = 1, vjust = -1, size = 7)
+  #  + theme(axis.text.x = element_text(size=20), axis.text.y = element_text(size=20),
+  #          axis.title.x = element_text(size=20), axis.title.y = element_text(size=20))
+  
+  #  ggsave(plot = roc_plot, paste0(file_name, ".png"),         width=mywidth_small, height=myheight_small, dpi=1200)
+  # cairo_ps(filename = paste0(file_name, ".eps"),           width = mywidth_small, height = myheight_small, pointsize = 12,           fallback_resolution = 1200)
+  #print(roc_plot)
+  #dev.off()
+  
+  roc_plot
+}
 
 
 # discord-webhook function ------------------------------------------------
