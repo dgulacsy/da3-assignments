@@ -347,7 +347,7 @@ for (model in 1:length(models)) {
 }
 rocs_det
 
-top3_models<- list(models$gbm, models$logit)
+top3_models<- list(models$gbm, models$logit, models$probit)
 ```
 
 # Run classification with loss function
