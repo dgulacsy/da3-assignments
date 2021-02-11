@@ -59,9 +59,10 @@ df <- read_rds("data/clean/fast-growth-firms-workfile.rds")
 # skim(df)
 
 # create smaller sample to test models
-samp_size <- round(nrow(df) / 20)
-set.seed(1234)
-df <- sample_n(df, samp_size)
+# samp_size <- round(nrow(df) / 20)
+# set.seed(1234)
+# df <- sample_n(df, samp_size)
+
 
 set.seed(1234)
 training_ratio <- 0.7
@@ -135,8 +136,8 @@ kable(high_corr)
 # Model building
 ```{r, results='hide'}
 # Setup cluster for parallel computing
-cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
-registerDoParallel(cluster)
+# cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
+# registerDoParallel(cluster)
 
 # Initialize lists
 models <- list()
@@ -153,6 +154,29 @@ train_control <- trainControl(
   verboseIter = TRUE
 )
 
+# LPM ------------------------
+
+set.seed(1234)
+start <- Sys.time()
+model_lpm <- train(
+  formula_lpm,
+  method = "glm",
+  data = data_train,
+  trControl = train_control,
+  na.action = na.omit,
+  metric = "ROC"
+)
+end <- Sys.time()
+
+# Save model props
+models[["lpm"]] <- model_lpm
+runtimes[["lpm"]] <- end-start
+
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**lpm model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
+
 # Logit ------------------------
 
 # Train model with CV
@@ -162,7 +186,7 @@ model_logit <- train(
     formula_log,
     method = "glm",
     data = data_train,
-    family = binomial,
+    family = binomial(link = "logit"),
     trControl = train_control,
     na.action = na.omit,
     metric = "ROC"
@@ -173,9 +197,10 @@ end <- Sys.time()
 models[["logit"]] <- model_logit
 runtimes[["logit"]] <- end-start
 
-# # Notification
-# modelname <- "logit model"
-# send_message(my_text = paste0(user, "your ", modelname, " has finished training!"))
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**logit model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -196,12 +221,13 @@ model_probit <- train(
 end <- Sys.time()
 
 # Save model props
-models[["probit"]] <- model_logit
+models[["probit"]] <- model_probit
 runtimes[["probit"]] <- end-start
 
-# # Notification
-# modelname <- "probit model"
-# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**probit model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -231,9 +257,10 @@ end <- Sys.time()
 models[["elastic"]] <- model_elastic
 runtimes[["elastic"]] <- end-start
 
-# # Notification
-# modelname <- "elastic net model"
-# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**elastic net model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -258,19 +285,22 @@ model_rf <- train(formula_rf,
 end <- Sys.time()
 
 # Save model props
-models[["rf"]] <- model_rf
+models[["rf"]] <- model_elastic
 runtimes[["rf"]] <- end-start
 
-# # Notification
-# modelname <- "random forest model"
-# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**random forest model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
 # GBM ------------------------
 
+
 # Train model with CV
 set.seed(1234)
+start <- Sys.time()
 model_gbm <- train(formula_gbm,
                    data = data_train,
                    method = "gbm",
@@ -278,15 +308,16 @@ model_gbm <- train(formula_gbm,
                    verbose = 0,
                    # num.threads = 7,
                    na.action = na.omit)
-end_time <- Sys.time()
+end <- Sys.time()
 
 # Save model props
 models[["gbm"]] <- model_gbm
 runtimes[["gbm"]] <- end-start
 
-# # Notification
-# modelname <- "gbm model"
-# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**gbm model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 ###################################################
 
@@ -312,17 +343,19 @@ end <- Sys.time()
 models[["knn"]] <- model_knn
 runtimes[["knn"]] <- end-start
 
-# # Notification
-# modelname <- "knn model"
-# send_message(my_text = paste0(user, " your ", modelname, " has finished training!"))
+# Notification
+time <- as.numeric(round(end - start, 2), unit = "mins")
+modelname <- "**knn model**"
+send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
 # Release cores from parallel computing
 stopCluster(cluster)
 ```
 
 
-```{r}
 
+
+```{r}
 # Create calibration curves ----------------------
 data_test$gbm_no_loss_pred <- predict(model_gbm, newdata = data_test, type = "prob")$fast_growth
 data_test$rf_no_loss_pred <- predict(model_rf, newdata = data_test, type = "prob")$fast_growth
@@ -365,6 +398,8 @@ top_models<-models[names(cv_aucs[1:top_n])]
 ########################################
 # Classification with a loss function
 ########################################
+
+
 
 # relative cost of of a false negative classification (as compared with a false positive classification)
 # it costs 3 times more to falsely identify a company as fast growing than falsely identifying to be not fast growing. Intuition that investing in a not fast growing company costs more than missing investment opportunities of fast growing firms.
