@@ -42,8 +42,17 @@ send_message <- function(webhookurl = url, my_text = text) {
   headers = c(
     `Content-type` = 'application/json'
   )
-  data= toJSON(list("content"= my_text), auto_unbox = T)
-  res <- httr::POST(url = webhookurl, httr::add_headers(.headers=headers), body = data)
+  tryCatch({
+    data= toJSON(list("content"= my_text), auto_unbox = T)
+    res <- httr::POST(url = webhookurl, httr::add_headers(.headers=headers), body = data)
+  },
+  warning = function(w) {
+    print('warning!')
+  }, error = function(e) {
+    print('error!')
+  }, finally = {
+  }
+  )
 }
 
 # read in credentials

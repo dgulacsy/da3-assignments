@@ -276,6 +276,11 @@ df <- df %>%
            ifelse(is.na(.), mean(., na.rm = TRUE), .),
          ceo_young = as.numeric(ceo_age < 40))
 
+# number emp, very noisy measure, impute with mean
+df <- df %>%
+  mutate(labor_avg = ifelse(is.na(labor_avg), mean(labor_avg, na.rm = TRUE), labor_avg),
+         flag_miss_labor_avg = as.numeric(is.na(labor_avg)))
+
 # create factors
 df <- df %>%
   mutate(urban = factor(urban_m, levels = c(1,2,3)) %>%
@@ -284,29 +289,32 @@ df <- df %>%
          ind2_cat = factor(ind2_cat, levels = sort(unique(df$ind2_cat))))
 
 df <- df %>%
-  mutate(is_fg = factor(is_fg, levels = c(0,1)) %>%
+  mutate(f_is_fg = factor(is_fg, levels = c(0,1)) %>%
            recode(., `0` = 'no_fast_gowth', `1` = "fast_growth"))
 
 # store comp_id as character
 df$comp_id<-as.character(df$comp_id)
 
+# Rows without target variables
+df <- df[complete.cases(df[,"f_is_fg"]),]
+
 # Variable Sets
 aux<- c("comp_id")
-target <- c("is_fg")
-business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
-ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
+target <- c("f_is_fg","is_fg")
+business<- c("ind2_cat","urban","region","labor_avg","flag_miss_labor_avg","age","age2","new")
+ceo<- c("ceo_inoffice_years","ceo_age","flag_low_ceo_age","flag_high_ceo_age","flag_miss_ceo_age","ceo_count",
         "ceo_female","ceo_foreign","ceo_gender","ceo_origin")
 sales<-c("sales_mil_log","d1_sales_mil_log")
-financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
+financial_basic <- c("sales_mil","curr_assets","curr_liab","fixed_assets","tang_assets",
                      "intang_assets","inventories","liq_assets","subscribed_cap",
                      "share_eq","material_exp","personnel_exp","amort","profit")
-financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
+financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax","d1_profit")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
 financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
-flags<- colnames(df %>% select(matches("*.flag.")))
+# flags<- colnames(df %>% select(matches("*flag.*")))
 
 # Keep only relevant variables for modeling
-keep<-c(aux,target,business,ceo,sales,financial_basic,financial_ext,financial_basic_ratios,financial_ext_ratios,flags)
+keep<-c(aux,target,business,ceo,sales,financial_basic,financial_ext,financial_basic_ratios,financial_ext_ratios)
 work_df <- df %>% select(keep)
 skim(work_df)
 
