@@ -46,10 +46,8 @@ In order to build a model to classify business fast growing and not we first of 
 # Data Cleaning/Wrangling
 To conduct our analysis we used a dataset from the information company Bisnode. After creating a binary variable indicating a fast growing firm, we filtered down the data to the year 2012. We discarded firms which had more than 10 million or less than 1000 Euros in sales. We did this to only have quite normal (mid-sized, post-revenue) businesses in our sample. Using the available data extracted from general ledgers we calculated transformed variables and some financial ratios like the current ratio, asset turnover ratio, ROE and ROA.
 
-
-
-
 # Model preparation
+
 
 ## Train test split
 
@@ -95,8 +93,8 @@ financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
 # Interactions
 X1<-paste("ind2_cat",c("urban","region","labor_avg","age","sales_mil_log","d1_sales_mil_log","ceo_age","ceo_female","ceo_foreign"),sep = '*')
 
-formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + "))))
-formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios),collapse = " + ")))) 
+formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, financial_ext_ratios),collapse = " + "))))
+formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, financial_ext_ratios),collapse = " + ")))) 
 formula_rf = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 formula_gbm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
 formula_knn = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financial_basic, financial_ext),collapse = " + ")))) 
@@ -130,7 +128,7 @@ high_corr<-high_corr[!duplicated(high_corr$vars),] %>%
   select(-vars) %>% 
   arrange(desc(abs(corr_val)))
 
-kable(high_corr)
+kable(top_n(high_corr,5),caption = "Check variables for multicollinearity and perfect collinearity (showing only top 5)")
 ```
 
 # Model building
@@ -353,8 +351,6 @@ stopCluster(cluster)
 ```
 
 
-
-
 ```{r}
 # Create calibration curves ----------------------
 data_test$gbm_no_loss_pred <- predict(model_gbm, newdata = data_test, type = "prob")$fast_growth
@@ -398,8 +394,6 @@ top_models<-models[names(cv_aucs[1:top_n])]
 ########################################
 # Classification with a loss function
 ########################################
-
-
 
 # relative cost of of a false negative classification (as compared with a false positive classification)
 # it costs 3 times more to falsely identify a company as fast growing than falsely identifying to be not fast growing. Intuition that investing in a not fast growing company costs more than missing investment opportunities of fast growing firms.
@@ -477,22 +471,31 @@ kable(models_summary)
 
 ```{r}
 # Take model to test and estimate RMSE, AUC and expected loss ------------------------------------
+
 data_test<-na.omit(data_test)
 
 gbm_predicted_probabilities_test <- predict(model_gbm, newdata = data_test, type = "prob")
 data_test$gbm_p_prediction <- gbm_predicted_probabilities_test$fast_growth
-RMSE(data_test$gbm_p_prediction, data_test$is_fg)
+test_rmse<-RMSE(data_test$gbm_p_prediction, data_test$is_fg)
 
 # ROC curve on holdout
 roc_obj_test <- roc(data_test$is_fg, data_test[, "gbm_p_prediction", drop=TRUE])
 
 # AUC
-as.numeric(roc_obj_test$auc)
+test_auc<-as.numeric(roc_obj_test$auc)
 
 # Get expected loss on test set with optimal threshold
 test_treshold <- coords(roc_obj_test, x = best_tresholds[["rf_p"]] , input= "threshold",
                            ret="all", transpose = FALSE)
 expected_loss_test <- (test_treshold$fp*FP + test_treshold$fn*FN)/length(data_test$is_fg)
-expected_loss_test
+test_avg_expected_loss<-mean(expected_loss_test)
+
+test_results<-data.frame(
+  model="GBM", 
+  `Test RMSE`= test_rmse,
+  `Test AUC`= test_auc, 
+  `Avg. Exp. Loss`=test_avg_expected_loss)
+
+kable(test_results)
 ```
 
