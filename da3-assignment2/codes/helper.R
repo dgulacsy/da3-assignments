@@ -109,7 +109,8 @@ create_calibration_plot <- function(data, file_name, prob_var, actual_var, y_lab
   
   # save_fig(file_name, output, "small")
   print(p)
-  return(binned_data)
+  results=list(plot=p,bins=binned_data)
+  return(results)
 }
 
 
