@@ -290,6 +290,9 @@ df <- df %>%
 # store comp_id as character
 df$comp_id<-as.character(df$comp_id)
 
+# Rows without target varaibles
+df <- df[complete.cases(df[,"is_fg"]),]
+
 # Variable Sets
 aux<- c("comp_id")
 target <- c("is_fg")
@@ -299,7 +302,7 @@ ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
 sales<-c("sales_mil_log","d1_sales_mil_log")
 financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
                      "intang_assets","inventories","liq_assets","subscribed_cap",
-                     "share_eq","material_exp","personnel_exp","amort","profit")
+                     "share_eq","material_exp","personnel_exp","amort","profit","d1_profit")
 financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
 financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
