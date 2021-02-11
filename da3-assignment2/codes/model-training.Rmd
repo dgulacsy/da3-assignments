@@ -153,29 +153,6 @@ train_control <- trainControl(
   verboseIter = TRUE
 )
 
-# LPM ------------------------
-
-set.seed(1234)
-start <- Sys.time()
-model_lpm <- train(
-  formula_lpm,
-  method = "glm",
-  data = data_train,
-  trControl = train_control,
-  na.action = na.omit,
-  metric = "ROC"
-)
-end <- Sys.time()
-
-# Save model props
-models[["lpm"]] <- model_lpm
-runtimes[["lpm"]] <- end-start
-
-# Notification
-time <- as.numeric(round(end - start, 2), unit = "mins")
-modelname <- "**lpm model**"
-send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
-
 # Logit ------------------------
 
 # Train model with CV
