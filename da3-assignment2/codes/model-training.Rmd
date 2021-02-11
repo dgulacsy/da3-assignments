@@ -37,7 +37,7 @@ source("codes/helper.R")
 ```
 
 # Introduction
-In this analytics project we are aiming to find the best model to identify fast growth firms based on their various characteristics and financial indicators. To place this task into a business environment we assumed that the main business motivation behind this whole analytics project is to identify those firms that worth investing in. We did not define a specific form of investment worth considering the recommended firms may be considered for fusion, acquisition or simple buy-in. To find the best a model, first of all we go through all the steps of sample design, label engineering and feature engineering. We also look at some results of our exploratory data analysis to see which particular aspects of the data we should keep in mind and what kind of model specifications we should come up. During our analysis we run altogether 7 probability prediction models and we do classification on 3 of them. We compare and assess their results and recommend a final model for the classification problem.
+In this analytics project we are aiming to find the best model to identify fast growth firms based on their various characteristics and financial indicators. To place this task into a business environment we assumed that the main business motivation behind this whole analytics project is to identify those firms that worth investing in. We did not define a specific form of investment worth considering the recommended firms may be considered for fusion, acquisition or simple buy-in. To find the best model, first of all we go through all the steps of sample design, label engineering and feature engineering. We also look at some results of our exploratory data analysis to see which particular aspects of the data we should keep in mind and what kind of model specifications we should come up with. During our analysis we run altogether 6 probability prediction models and we do classification on 3 of them. We compare and assess their results and recommend a final model for the classification problem.
 
 # Label engineering
 During 
@@ -50,6 +50,8 @@ During
 
 
 # Model preparation
+
+We are going to build two logistic regression models (one using logit the other probit as their link function), an elastic net regularized regression model, a K-nearest neighbor classificator, a random forest model and finally a gradient boosting machine. Each model will be cross validated 10 times using the same sample, and the top 3 model will be selected based on the highest cross-validated ROC value.
 
 ## Train test split
 
@@ -328,6 +330,7 @@ send_message(my_text = paste0(user, ", your ", modelname, " has finished trainin
 
 
 # Choose Top 3 Probability Prediction Models based on AUC
+
 ```{r}
 # Calculate mean CV AUCs and choose top 3 models to use for classification
 cv_aucs<-sort(unlist(lapply(models, function(model){
