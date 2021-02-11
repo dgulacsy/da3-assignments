@@ -51,7 +51,7 @@ During
 
 # Model preparation
 
-We are going to build two logistic regression models (one using logit the other probit as their link function), an elastic net regularized regression model, a K-nearest neighbor classificator, a random forest model and finally a gradient boosting machine. Each model will be cross validated 10 times using the same sample, and the top 3 model will be selected based on the highest cross-validated ROC value.
+We are going to build two logistic regression models (one using logit the other probit as their link function), an elastic net regularized regression model, a K-nearest neighbor classificator, a random forest model and finally a gradient boosting machine. Each model will be cross validated 10 times using the same sample, and the top 3 model will be selected based on the highest cross-validated ROC value. We will use these models to find the optimal threshold according to a pre-determined loss function and compare the expected loss between the models. Finally we will evaluate model performance on a test sample.
 
 ## Train test split
 
