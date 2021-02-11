@@ -1,11 +1,19 @@
 ---
-title: "High growth prediction"
-author: "Attila Szuts"
+title: "Finding fast growing firms"
+subtitle: "DA3 Assignment 2"
+author: "Attila Szuts, Dominik Gulacsy"
 date: "2/10/2021"
+code_download: yes
 output: html_document
 editor_options: 
   chunk_output_type: console
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
+```
+
+## [Github Repo](https://github.com/dgulacsy/da3-assignments/tree/main/da3-assignment2)
 
 ```{r}
 rm(list = ls())
@@ -18,11 +26,22 @@ library(pROC)
 source("codes/helper.R")
 ```
 
+# Introduction
 
-# Train test split
+
+
+# Data Cleaning/Wrangling
+
+
+
+
+
+# Model preparation
+
+## 1. Train test split
 
 ```{r}
-df <- read_rds("data/clean/bisnode_clean.rds")
+df <- read_rds("data/clean/fast-growth-firms-workfile.rds")
 
 # df$is_fg <- as.factor(df$is_fg)
 # df$f_is_fg <- as.factor(ifelse(df$f_is_fg == "fast growth", "fast_growth", "no_fast_growth"))
@@ -49,20 +68,21 @@ data_train <- df[train_indices, ]
 data_test <- df[-train_indices, ]
 ```
 
+## 2. Variable selection
+
 ```{r}
 target <- c("is_fg")
-business<- c("ind2_cat","urban","region","labor_avg","age","age2","new")
-ceo<- c("ceo_inoffice_years","ceo_age","ceo_count",
+business <- c("ind2_cat","urban","region","labor_avg","age","age2","new")
+ceo <- c("ceo_inoffice_years","ceo_age","ceo_count",
         "ceo_female","ceo_foreign","ceo_gender","ceo_origin")
-sales<-c("sales_mil_log","d1_sales_mil_log")
+sales <- c("sales_mil_log","d1_sales_mil_log")
 financial_basic <- c("curr_assets","curr_liab","fixed_assets","tang_assets",
                      "intang_assets","inventories","liq_assets","subscribed_cap",
-                     "share_eq","material_exp","personnel_exp","amort","profit")
+                     "share_eq","material_exp","personnel_exp","amort","profit","d1_profit")
 financial_ext <- c("extra_exp","extra_inc","extra_profit_loss","inc_bef_tax")
 financial_basic_ratios <- colnames(df %>% select(matches("*._bs|*._pl")))
-flags<- colnames(df %>% select(matches("*.flag.")))
-in_progress <- c("curr_ratio","acid_ratio","cash_ratio","dte_ratio","at_ratio","roa_ratio","roe_ratio","d1_profit")
-#financial_ext_ratios <- colnames(df %>% select(matches("*._ratio"))
+financial_ext_ratios <- colnames(df %>% select(matches("*._ratio")))
+flags <- colnames(df %>% select(matches("*.flag.")))
 
 formula_lpm = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + "))))
 formula_log = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, financial_basic, financial_ext, financial_basic_ratios, flags),collapse = " + ")))) 
@@ -74,16 +94,39 @@ formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo,sales, 
 
 # EDA
 ```{r}
-df %>% select(where(is.numeric)) %>% ggcorr(layout.exp = 1)
 
+df %>% select(where(is.numeric)) %>% ggcorr(layout.exp = 1)
 ggpairs(df, columns = c(target, business))
+
+# Check for multicollinearity and perfect collinearity
+numeric_df <- keep( df , is.numeric )
+cT <- cor(numeric_df , use = "complete.obs")
+
+# Check for highly correlated values:
+sum( abs( cT ) >= 0.8 & cT != 1 ) / 2
+# Find the correlations which are higher than 0.8
+id_cr <- which( abs( cT ) >= 0.8 & cT != 1 )
+pair_names <- expand.grid( variable.names(numeric_df) , variable.names(numeric_df) )
+# Get the pairs:
+high_corr <- pair_names[ id_cr , ]
+high_corr <- mutate( high_corr , corr_val = cT[ id_cr ] )
+high_corr <- mutate(high_corr, Var1 = as.character(Var1))
+high_corr <- mutate(high_corr, Var2 = as.character(Var2))
+high_corr$vars<-unlist(lapply(1:nrow(high_corr),function(i){
+  paste(sort(c(high_corr$Var1[i],high_corr$Var2[i])), collapse = "")
+}))
+high_corr<-high_corr[!duplicated(high_corr$vars),]
+high_corr
+
 ```
 
+# Modelling
 
-# LPM
+##1. LPM
 
 ```{r}
-model_lpm <- lm(formula_lpm, data = data_train)
+model_lpm <- lm(formula_lpm, data =
+                  data_train)
 # 
 # Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
 #   contrasts can be applied only to factors with 2 or more levels
@@ -92,7 +135,7 @@ model_lpm
 ```
 
 
-# Logit
+##2. Logit
 
 ```{r}
 model_logit <- glm(formula = formula_log, data = data_train, family = "binomial")
@@ -104,7 +147,7 @@ model_logit
 ```
 
 
-# Probit
+##3. Probit
 
 ```{r}
 model_probit <- glm(formula = formula_log, data = data_train, family = binomial(link = "probit"))
@@ -114,7 +157,7 @@ model_probit <- glm(formula = formula_log, data = data_train, family = binomial(
 # 
 ```
 
-# Random Forest
+##4. Random Forest
 
 ```{r}
 trctrl <- trainControl(method = "cv", number = 10)
@@ -172,7 +215,7 @@ rf_model_p <- train(
   
 ```
 
-# Boosting
+##5. Boosting
 
 ```{r}
 start_time <- Sys.time()
@@ -200,7 +243,7 @@ send_message()
 ```
 
 
-# KNN
+##6. KNN
 
 ```{r}
 set.seed(1234)
@@ -230,7 +273,7 @@ postResample(SpamTest$count, predict(model_knn, SpamTest))
 ```
 
 
-# Elastic Net
+##7.  Elastic Net
 ```{r}
 set.seed(1234)
 trctrl <- trainControl(method = "cv", classProbs=TRUE, summaryFunction=twoClassSummary)
