@@ -86,6 +86,8 @@ ggplot(agg_df2, aes(y=quantity, x=reorder(item,quantity), fill=item)) +
   facet_wrap(. ~ category ,scales = 'free')+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
         legend.position = "none")
+ggsave("out/admissions_types.png", dpi = 1200)
+
 
 ggplot(cc_df, aes(y=n, x=reorder(item,n), fill=item)) + 
   geom_bar(position="dodge", stat="identity")+
@@ -101,19 +103,19 @@ ggplot(agg_df1 %>% filter(category=="ADMISTIER2"), aes(y=quantity, x=reorder(ite
 
 data <- data %>%
   mutate(adm_core =  (category %in% c("ADMISTIER1","ADMISTIER2") & 
-                              item %in%  c("ADULT" , "SENIOR" ,"TEEN" ,"CHILD", "TOT", "SPECTATOR","CHILD PM","ADULT PM","SENIOR PM", "TOT PM", "TEEN PM")),
+                        item %in%  c("ADULT" , "SENIOR" ,"TEEN" ,"CHILD", "TOT", "SPECTATOR","CHILD PM","ADULT PM","SENIOR PM", "TOT PM", "TEEN PM")),
          adm_com =   (category %in% c("COMMUNITY") &
                         item %in%  names(table(agg_df2[agg_df2$category=="COMMUNITY","item"]))),
          adm_less =  (category %in% c("LESSONS") &
-                              item %in%  names(table(agg_df2[agg_df2$category=="LESSONS","item"]))),
+                        item %in%  names(table(agg_df2[agg_df2$category=="LESSONS","item"]))),
          adm_prom =  (category %in% c("PROMOTIONS") &
-                              item %in%  names(table(agg_df2[agg_df2$category=="PROMOTIONS","item"]))),
+                        item %in%  names(table(agg_df2[agg_df2$category=="PROMOTIONS","item"]))),
          adm_sch =   (category %in% c("SCHOOL") &
-                              item %in%  names(table(agg_df2[agg_df2$category=="SCHOOL","item"]))),
+                        item %in%  names(table(agg_df2[agg_df2$category=="SCHOOL","item"]))),
          adm_spec =  (category %in% c("SPEC EVENT") &
-                              item %in%  names(table(agg_df2[agg_df2$category=="SPEC EVENT","item"]))),
+                        item %in%  names(table(agg_df2[agg_df2$category=="SPEC EVENT","item"]))),
          adm_swim =  (category %in% c("SWIM TEAM") &
-                              item %in%  names(table(agg_df2[agg_df2$category=="SWIM TEAM","item"])))) %>% 
+                        item %in%  names(table(agg_df2[agg_df2$category=="SWIM TEAM","item"])))) %>% 
   filter(adm_core | adm_com | adm_less | adm_prom | adm_sch | adm_spec | adm_swim)
 
 adm_types<-c("adm_core","adm_com","adm_less","adm_prom","adm_sch","adm_spec","adm_swim")

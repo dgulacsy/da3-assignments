@@ -119,6 +119,17 @@ daily_agg$dow_abb   <- factor(   mydays[daily_agg$dow],  levels=mydays)
 daily_agg$month_abb <- factor(month.abb[daily_agg$month],levels=month.abb)
 
 # Graphs
+
+# Month - year plot
+g0<-ggplot(daily_agg,aes(x=year,y=adm_core))+
+  geom_bar(aes(fill=adm_core),position="dodge", stat="identity")+
+  facet_wrap(. ~ month_abb ,scales = 'free')+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        legend.position = "none")
+g0
+# ggsave("out/swimming_pools_month_admissions_core.png", dpi = 1200)
+
+# Admission core 2015
 g1 <-ggplot(data=daily_agg[daily_agg$year==2015,], aes(x=date, y=adm_com)) +
   geom_line(size=0.4, color=color[1]) +
   scale_x_date(breaks = as.Date(c("2015-01-01","2015-04-01","2015-07-01","2015-10-01","2016-01-01")),
@@ -129,6 +140,33 @@ g1 <-ggplot(data=daily_agg[daily_agg$year==2015,], aes(x=date, y=adm_com)) +
 g1
 # ggsave("out/swimming_pools_2015_admissions_core.png", dpi = 1200)
 
+# Admission core 2015 - other admissions 2015
+gl<-list()
+lags<-colnames(daily_agg %>% select(matches("*._lag")))
+names<-c("Community","Lessons","Promotion","School","Spec Event","Swim Team")
+daily_agg<-daily_agg %>% 
+  mutate_at(vars(all_of(lags)), funs("scaled"=scale(.)))
+scaled_vars<-colnames(daily_agg %>% select(matches("*._lag_scaled")))[-1]
+for (i in 1:6){
+  var<-scaled_vars[i]
+  name<-names[i]
+  p<-ggplot(data=daily_agg[daily_agg$year==2015,]) +
+    geom_line(aes(x=date, y=scale(adm_core), color="purple"),size=1) +
+    geom_line(aes_string(x="date", y=var, color=shQuote("orange")),size=1) +
+    scale_x_date(breaks = as.Date(c("2015-01-01","2015-04-01","2015-07-01","2015-10-01","2016-01-01")),
+                 labels = date_format("%d%b%Y"),
+                 date_minor_breaks = "1 month" ) +
+    labs(subtitle= paste0("Number of tickets sold in 2015"," (",name,")"), x = "Day", y="# Tickets"," (",names[i],",Daily)" ) +
+    scale_color_manual(name="Category", values=c(purple=color[1],orange=color[2]),labels = c("Core", name))+
+    theme(legend.position="bottom")
+  gl[[i]]<-p
+}
+gl_grid<-plot_grid(plotlist = gl,nrow = 3,ncol=2)
+gl_grid
+
+# ggsave("out/swimming_pools_2015_admissions_others.png", dpi = 1200,width = mywidth, height = 7)
+
+# Admission core 2010-2014
 g2<-ggplot(data=daily_agg[(daily_agg$year>=2010) & (daily_agg$year<=2014),], aes(x=date, y=adm_core)) +
   geom_line(size=0.2, color=color[1]) +
   scale_x_date(breaks = as.Date(c("2010-01-01","2011-01-01","2012-01-01","2013-01-01","2014-01-01","2015-01-01")),
@@ -139,45 +177,41 @@ g2<-ggplot(data=daily_agg[(daily_agg$year>=2010) & (daily_agg$year<=2014),], aes
 g2
 # ggsave("out/swimming_pools_2010_2014_admissions_core.png", dpi = 1200)
 
+# Admission core by month discrete
 g3<-ggplot(data=daily_agg, aes(x=month_abb, y=adm_core)) +
   labs(title= "Number of tickets sold by month (Core)", x = "Month", y="Number of tickets sold (Core)" ) +
   geom_boxplot(color=color[1],outlier.color = color[4], outlier.alpha = 0.6, outlier.size = 0.6)
 g3
 # ggsave("out/swimming_pools_monthly_admissions_core.png", dpi = 1200)
 
+# Admission core by day of the week
 g4<-ggplot(data=daily_agg, aes(x=dow_abb, y=adm_core)) +
   labs(title= "Number of tickets sold by day of the week (Core)", x = "Day of the week", y="Number of tickets sold (Core)" ) +
   geom_boxplot(color=color[1],outlier.color = color[4], outlier.alpha = 0.6, outlier.size = 0.4)
-#geom_boxplot(color=color[1], outlier.shape = NA)
 g4
-ggsave("out/swimming_pools_dow_admissions_core.png", dpi = 1200)
+# ggsave("out/swimming_pools_dow_admissions_core.png", dpi = 1200)
 
+# Month - day of the week admission core heatmap
 # to check for interactions, look at the heatmap
 swim_heatmap <- 
   ggplot(daily_agg, aes(x = dow_abb, y = month_abb, fill = adm_core_md)) +
   geom_tile(colour = "white") +
-  labs(x = 'Day of the week', y = 'Month') +
+  labs(subtitle="Average ticket sales by day of week and month", x = 'Day of the week', y = 'Month') +
   scale_fill_viridis(alpha = 0.7, begin = 1, end = 0.2, direction = 1, option = "A") +
   theme(legend.position = "right",
         legend.text = element_text(size=6),
         legend.title =element_text(size=6)
   )
 swim_heatmap
-
-ggsave("out/swimming_pools_md_heatmap_admissions_core.png", dpi = 1200)
-
-# not in book
-swim_heatmap_log <-
-  ggplot(daily_agg, aes(x = dow_abb, y = month_abb, fill = ln_adm_core_md)) +
-  geom_tile(colour = "white") +
-  labs(x = 'Day of week', y = 'Month ') +
-  scale_fill_viridis(alpha = 0.7, begin = 1, end = 0.2, direction = 1, option = "A")
-swim_heatmap_log
-ggsave("out/swimming_pools_md_heatmap_admissions_core.png", dpi = 1200)
+# ggsave("out/swimming_pools_md_heatmap_admissions_core.png", dpi = 1200)
 
 #####################################
 # PREDICTION  ----------
 #####################################
+
+# discard 2010 to use lag variables
+daily_agg <- daily_agg %>%
+  filter(year!=2010)
 
 # Create train/houldout data
 # Last year of data
@@ -203,15 +237,16 @@ train_index_list <- test_index_list %>%
 train_control <- trainControl(
   method = "cv",
   index = train_index_list, #index of train data for each fold
-  # indexOut = index of test data for each fold, complement of index by default
-  # indexFinal = index of data to use to train final model, whole train data by default
   savePredictions = TRUE
 )
 
 # Fit models ---------------------------------------------------------
 
-#Model 1 linear trend + monthly seasonality
-model1 <- as.formula(adm_core ~ 1 + trend + month)
+lags<-c("adm_com_w_lag","adm_less_w_lag","adm_sch_w_lag","adm_spec_w_lag","adm_swim_w_lag","adm_prom_w_lag")
+X1<-paste(lags,"month",sep="*")
+
+#Model 1 (Baseline) linear trend + monthly seasonality
+model1 <- as.formula(adm_core ~ 1 + trend + month + dow)
 reg1 <- train(
   model1,
   method = "lm",
@@ -219,8 +254,8 @@ reg1 <- train(
   trControl = train_control
 )
 
-#Model 2 linear trend + monthly seasonality + days of week seasonality 
-model2 <- as.formula(adm_core ~ 1 + trend + month + dow)
+#Model 2 linear trend + monthly seasonality + days of week  seasonality + holidays + sch*dow
+model2 <- as.formula(adm_core ~ 1 + trend + month + dow + isHoliday + school_off*dow)
 reg2 <- train(
   model2,
   method = "lm",
@@ -228,8 +263,11 @@ reg2 <- train(
   trControl = train_control
 )
 
-#Model 3 linear trend + monthly seasonality + days of week  seasonality + holidays 
-model3 <- as.formula(adm_core ~ 1 + trend + month + dow + isHoliday)
+#Model 3 linear trend + monthly seasonality + days of week  seasonality + holidays + other lagged variables + interactions 
+model3 <- formula(paste0("adm_core"," ~ ", 
+                         paste(c("1","trend", "month", "dow", "isHoliday", "school_off*dow", "weekend*month",lags,X1)
+                               ,collapse = " + ")
+                         ,collapse = NULL))
 reg3 <- train(
   model3,
   method = "lm",
@@ -237,30 +275,78 @@ reg3 <- train(
   trControl = train_control
 )
 
-#Model 4 linear trend + monthly seasonality + days of week  seasonality + holidays + sch*dow
-model4 <- as.formula(adm_core ~ 1 + trend + month + dow + isHoliday + school_off*dow)
-reg4 <- train(
-  model4,
-  method = "lm",
-  data = data_train,
-  trControl = train_control
-)
+stargazer(reg1$finalModel, reg2$finalModel, reg3$finalModel,
+          out="out/reg_comparison.html", type = "html", digits=2)
 
-#Model 5 linear trend + monthly seasonality + days of week  seasonality + holidays + interactions
-model5 <- as.formula(adm_core ~ 1 + trend + month + dow + isHoliday + isHoliday*dow + school_off*dow + weekend*month)
-reg5 <- train(
-  model5,
-  method = "lm",
-  data = data_train,
-  trControl = train_control
-)
+# Get CV RMSE ----------------------------------------------
 
-#Model 6 =  multiplicative trend and seasonality (ie take logs, predict log values and transform back with correction term)
-model6 <- as.formula(ln_adm_core ~ 1 + trend + month + dow + isHoliday + school_off*dow)
-reg6 <- train(
-  model6,
-  method = "lm",
-  data = data_train,
-  trControl = train_control
-)
+model_names <- c("reg1","reg2","reg3")
+rmse_CV <- c()
+
+for (i in model_names) {
+  rmse_CV[i]  <- get(i)$results$RMSE
+}
+rmse_cv_df<-as.data.frame(rmse_CV)
+rmse_cv_df$rel_rmse_cv<-rmse_cv_df$rmse_CV/mean(daily_agg$adm_core)
+rmse_cv_df
+
+###########################x
+# Evaluate best model on holdout set --------------------------------------------
+###########################x
+
+data_holdout <- data_holdout %>% 
+  mutate(y_hat_3 = predict(reg3, newdata = .))
+
+rmse_holdout_best <- RMSE(data_holdout$adm_core, data_holdout$y_hat_3)
+rmse_holdout_df<-data.frame(Model="reg3",RMSE=rmse_holdout_best,`Rel. RMSE`=rmse_holdout_best/mean(daily_agg$adm_core))
+
+###########################
+# Plot best predictions --------------------------------------------
+###########################
+
+#graph relative RMSE (on holdout) per month 
+rmse_monthly <- data_holdout %>% 
+  mutate(month = factor(format(date,"%b"), 
+                        levels= unique(format(sort(.$date),"%b")), 
+                        ordered=TRUE)) %>% 
+  group_by(month) %>% 
+  summarise(
+    RMSE = RMSE(adm_core, y_hat_3),
+    RMSE_norm= RMSE(adm_core, y_hat_3)/mean(adm_core)
+  ) 
+
+g_predictions_rmse<- ggplot(rmse_monthly, aes(x = month, y = RMSE_norm)) +
+  geom_col(bg=color[1], color=color[1]) +
+  labs( x = "Date (month)", y="RMSE (normalized by monthly sales)" )
+g_predictions_rmse
+ggsave("out/best_model_preds_RMSE_month.png", dpi = 1200)
+
+g_predictions<-
+  ggplot(data=data_holdout, aes(x=date, y=adm_core)) +
+  geom_line(aes(size="Actual", colour="Actual", linetype = "Actual") ) +
+  geom_line(aes(y=y_hat_3, size="Predicted" ,colour="Predicted",  linetype= "Predicted")) +
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_date(expand=c(0,0), breaks = as.Date(c("2016-01-01","2016-03-01","2016-05-01","2016-07-01","2016-09-01","2016-11-01", "2017-01-01")),
+               labels = date_format("%d%b%Y"),
+               date_minor_breaks = "1 month" )+
+  scale_color_manual(values=color[1:2], name="")+
+  scale_size_manual(name="", values=c(0.4,0.7))+
+  #scale_linetype_manual(name = "", values=c("solid", "solid")) +
+  scale_linetype_manual(name = "", values=c("solid", "twodash")) +
+  labs( x = "Date (day)", y="Daily ticket sales" ) +
+  #theme(legend.position = "none") +
+  #annotate("text", x = as.Date("2016-07-15"), y = 50, label = "Predicted", color=color[2], size=3)+
+  #annotate("text", x = as.Date("2016-09-01"), y = 125, label = "Actual", color=color[1], size=3)
+  theme(legend.position=c(0.7,0.8),
+        legend.direction = "horizontal",
+        legend.text = element_text(size = 6),
+        legend.key.width = unit(.8, "cm"),
+        legend.key.height = unit(.3, "cm")) + 
+  guides(linetype = guide_legend(override.aes = list(size = 0.8))
+  )
+g_predictions
+ggsave("out/best_model_preds.png", dpi = 1200)
+
+
+
 

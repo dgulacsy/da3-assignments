@@ -13,7 +13,7 @@ library(ggplot2)
 # Set Plot Size Dimensions
 mywidth=7.5
 myheight=5.62
-color=c("purple4","red","darkmagenta","black")
+color=c("purple4","orange","darkmagenta","black")
 
 
 # Set default theme for plots
