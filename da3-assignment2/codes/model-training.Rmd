@@ -106,6 +106,10 @@ formula_enet = formula(paste0(target, paste0(" ~ ",paste(c(business, ceo, financ
 ```
 
 # EDA
+<<<<<<< HEAD
+=======
+
+>>>>>>> 78fc884a9c6c7183a0ef04ac42978325dc37fec4
 We investigated correlations between our predictors to see if there are any multicollinearity among them. Altough it is high, there was no perfect collinearity discovered.
 
 ```{r eda, include=F}
@@ -140,6 +144,11 @@ kable(top_n(high_corr,5),caption = "Check variables for multicollinearity and pe
 ```
 
 # Model building
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 78fc884a9c6c7183a0ef04ac42978325dc37fec4
 ```{r modeling, results='hide'}
 # Setup cluster for parallel computing
 # cluster <- makeCluster(detectCores() - 1) # leave 1 core for OS
@@ -160,6 +169,7 @@ train_control <- trainControl(
   verboseIter = TRUE
 )
 
+<<<<<<< HEAD
 # LPM ------------------------
 
 set.seed(1234)
@@ -183,6 +193,8 @@ time <- as.numeric(round(end - start, 2), unit = "mins")
 modelname <- "**lpm model**"
 send_message(my_text = paste0(user, ", your ", modelname, " has finished training! It took: ", time, " minutes."))
 
+=======
+>>>>>>> 78fc884a9c6c7183a0ef04ac42978325dc37fec4
 # Logit ------------------------
 
 # Train model with CV
@@ -303,7 +315,10 @@ send_message(my_text = paste0(user, ", your ", modelname, " has finished trainin
 
 # GBM ------------------------
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 78fc884a9c6c7183a0ef04ac42978325dc37fec4
 # Train model with CV
 set.seed(1234)
 start <- Sys.time()
@@ -432,6 +447,14 @@ calib_curves
 # Classification with a loss function
 ########################################
 
+<<<<<<< HEAD
+=======
+# Introduce loss function
+cost_matrix<-data.frame(status=c("no_fast_growth","fast_growth"),no_fast_growth=c(0,3),fast_growth=c(1,0))
+
+kable(cost_matrix)
+
+>>>>>>> 78fc884a9c6c7183a0ef04ac42978325dc37fec4
 # relative cost of of a false negative classification (as compared with a false positive classification)
 # it costs 3 times more to falsely identify a company as fast growing than falsely identifying to be not fast growing. Intuition that investing in a not fast growing company costs more than missing investment opportunities of fast growing firms.
 FP=1.2
@@ -504,9 +527,15 @@ Next, we ran a cross validation on choosing the loss function with the minimal e
 ```{r echo=FALSE}
 # Choose GBM
 kable(models_summary)
+<<<<<<< HEAD
 
 ```
 
+=======
+```
+
+
+>>>>>>> 78fc884a9c6c7183a0ef04ac42978325dc37fec4
 # Test model performance
 
 ```{r test_performance, include=F}
@@ -538,6 +567,7 @@ test_results<-data.frame(
 ```
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 Finally, we are going to evaluate GBM's performance on the test/holdout set. We can see that it performs almost as good as on the the training test with a slightly higher expected loss. We can say that it is a robust model, and we haven't overfit on the training data. 
 
@@ -547,3 +577,11 @@ kable(test_results)
 ```
 
 ==== BASE ====
+=======
+Finally, we are going to evaluate GBM's performance on the test/holdout set. We can see that it performs almost as good as on the the training test with a slightly higher expected loss. We can say that it is a robust model, and we haven't overfit on the training data. 
+
+```{r echo=FALSE}
+kable(test_results)
+```
+
+>>>>>>> 78fc884a9c6c7183a0ef04ac42978325dc37fec4
